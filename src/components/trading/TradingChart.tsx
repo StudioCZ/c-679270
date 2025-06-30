@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { createChart, ColorType, IChartApi, ISeriesApi } from "lightweight-charts";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { useBinanceWebSocket } from "@/hooks/useBinanceWebSocket";
 import { useBinanceKlines } from "@/hooks/useBinanceKlines";
+import { Wifi, WifiOff, AlertCircle } from "lucide-react";
 
 interface TradingChartProps {
   timeframe: string;
@@ -15,16 +17,18 @@ const TradingChart = ({ timeframe }: TradingChartProps) => {
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const [isChartReady, setIsChartReady] = useState(false);
 
-  // Fetch historical data
-  const { data: historicalData, isLoading } = useBinanceKlines("BTCUSDT", timeframe);
+  // Fetch real historical data from Binance
+  const { data: historicalData, isLoading, error, isError } = useBinanceKlines("BTCUSDT", timeframe);
   
-  // WebSocket for real-time updates
-  const { lastPrice, priceChange, priceChangePercent } = useBinanceWebSocket("BTCUSDT");
+  // Real-time WebSocket data from Binance
+  const { lastPrice, priceChange, priceChangePercent, isConnected, connectionError } = useBinanceWebSocket("BTCUSDT");
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    // Create chart
+    console.log('🎯 Initializing chart with real Binance data');
+
+    // Create chart with professional trading theme
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
@@ -39,6 +43,10 @@ const TradingChart = ({ timeframe }: TradingChartProps) => {
       },
       rightPriceScale: {
         borderColor: '#485563',
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.2,
+        },
       },
       timeScale: {
         borderColor: '#485563',
@@ -50,14 +58,14 @@ const TradingChart = ({ timeframe }: TradingChartProps) => {
         fontSize: 24,
         horzAlign: 'left',
         vertAlign: 'top',
-        color: 'rgba(171, 71, 188, 0.3)',
-        text: 'BTC/USDT',
+        color: 'rgba(59, 130, 246, 0.1)',
+        text: 'BTC/USDT - Real Binance Data',
       },
       width: chartContainerRef.current.clientWidth,
       height: chartContainerRef.current.clientHeight,
     });
 
-    // Create candlestick series
+    // Create candlestick series for price data
     const candlestickSeries = chart.addCandlestickSeries({
       upColor: '#10b981',
       downColor: '#ef4444',
@@ -105,13 +113,20 @@ const TradingChart = ({ timeframe }: TradingChartProps) => {
     };
   }, []);
 
-  // Update chart with historical data
+  // Update chart with real Binance historical data
   useEffect(() => {
     if (!isChartReady || !historicalData || !candlestickSeriesRef.current || !volumeSeriesRef.current) return;
 
     try {
+      console.log('📊 Updating chart with real Binance data:', {
+        dataPoints: historicalData.length,
+        timeframe,
+        latestPrice: historicalData[historicalData.length - 1]?.[4]
+      });
+
+      // Convert Binance kline data to chart format
       const candleData = historicalData.map((kline: any) => ({
-        time: Math.floor(kline[0] / 1000),
+        time: Math.floor(kline[0] / 1000), // Convert to seconds
         open: parseFloat(kline[1]),
         high: parseFloat(kline[2]),
         low: parseFloat(kline[3]),
@@ -124,50 +139,57 @@ const TradingChart = ({ timeframe }: TradingChartProps) => {
         color: parseFloat(kline[4]) >= parseFloat(kline[1]) ? '#10b981' : '#ef4444',
       }));
 
+      // Set the data on the chart
       candlestickSeriesRef.current.setData(candleData);
       volumeSeriesRef.current.setData(volumeData);
 
-      // Add some example signals
-      addExampleSignals();
+      console.log('✅ Chart updated successfully with real data');
     } catch (error) {
-      console.error('Error updating chart data:', error);
+      console.error('❌ Error updating chart with real data:', error);
     }
-  }, [historicalData, isChartReady]);
+  }, [historicalData, isChartReady, timeframe]);
 
-  const addExampleSignals = () => {
-    if (!candlestickSeriesRef.current) return;
+  // Update chart with real-time price updates
+  useEffect(() => {
+    if (!isChartReady || !candlestickSeriesRef.current || !lastPrice) return;
 
     try {
-      // Add buy signal marker
-      candlestickSeriesRef.current.setMarkers([
-        {
-          time: Math.floor(Date.now() / 1000) - 3600,
-          position: 'belowBar',
-          color: '#10b981',
-          shape: 'arrowUp',
-          text: 'BUY Signal\nSMC + Elliott Wave',
-          size: 1,
-        },
-        {
-          time: Math.floor(Date.now() / 1000) - 7200,
-          position: 'aboveBar',
-          color: '#ef4444',
-          shape: 'arrowDown',
-          text: 'SELL Signal\nBreak of Structure',
-          size: 1,
-        },
-      ]);
+      // Update the last candle with real-time price
+      const currentTime = Math.floor(Date.now() / 1000);
+      candlestickSeriesRef.current.update({
+        time: currentTime,
+        close: lastPrice,
+      });
     } catch (error) {
-      console.error('Error adding signal markers:', error);
+      console.error('❌ Error updating real-time price:', error);
     }
-  };
+  }, [lastPrice, isChartReady]);
 
   if (isLoading) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-card rounded-lg">
-        <div className="flex flex-col items-center space-y-2">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          <p className="text-sm text-muted-foreground">Loading chart data...</p>
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          <div className="text-center">
+            <p className="text-lg font-semibold">Loading Real Binance Data</p>
+            <p className="text-sm text-muted-foreground">Fetching {timeframe} timeframe data...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || error) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-card rounded-lg">
+        <div className="flex flex-col items-center space-y-4 text-center">
+          <AlertCircle className="h-12 w-12 text-red-500" />
+          <div>
+            <p className="text-lg font-semibold text-red-500">Failed to Load Real Data</p>
+            <p className="text-sm text-muted-foreground">
+              Unable to fetch data from Binance API. Please check your connection.
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -177,36 +199,57 @@ const TradingChart = ({ timeframe }: TradingChartProps) => {
     <div className="w-full h-full relative bg-card rounded-lg overflow-hidden">
       <div ref={chartContainerRef} className="w-full h-full" />
       
-      {/* Price Info Overlay */}
-      <div className="absolute top-4 left-4 bg-background/90 backdrop-blur-sm rounded-lg p-3 border shadow-lg">
+      {/* Real-time Price Info Overlay */}
+      <div className="absolute top-4 left-4 bg-background/95 backdrop-blur-sm rounded-lg p-4 border shadow-lg">
         <div className="flex items-center space-x-4">
           <div>
             <div className="text-2xl font-bold font-mono">
-              ${lastPrice?.toLocaleString() || "43,250.00"}
+              ${lastPrice?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "Loading..."}
             </div>
             <div className={`text-sm flex items-center space-x-1 ${
               (priceChange || 0) >= 0 ? 'text-green-400' : 'text-red-400'
             }`}>
               <span>{(priceChange || 0) >= 0 ? '↗' : '↘'}</span>
-              <span>${Math.abs(priceChange || 125).toFixed(2)}</span>
-              <span>({(priceChangePercent || 2.85).toFixed(2)}%)</span>
+              <span>{priceChange ? `$${Math.abs(priceChange).toFixed(2)}` : 'Loading...'}</span>
+              <span>({priceChangePercent ? `${priceChangePercent.toFixed(2)}%` : 'Loading...'})</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Signal Indicators */}
+      {/* Connection Status */}
       <div className="absolute top-4 right-4 space-y-2">
-        <div className="bg-green-500/20 border border-green-500/30 rounded-lg p-2 text-green-400 text-xs backdrop-blur-sm">
-          <div className="font-semibold">Active BUY Signal</div>
-          <div>Confidence: 85%</div>
+        <Badge 
+          variant={isConnected ? "default" : "destructive"} 
+          className="flex items-center space-x-1"
+        >
+          {isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+          <span>{isConnected ? "Live" : "Offline"}</span>
+        </Badge>
+        
+        {connectionError && (
+          <Badge variant="destructive" className="text-xs">
+            Connection Error
+          </Badge>
+        )}
+      </div>
+
+      {/* Data Source indicator */}
+      <div className="absolute bottom-4 left-4 bg-background/95 backdrop-blur-sm rounded-lg px-3 py-2 border">
+        <div className="flex items-center space-x-2">
+          <Badge variant="outline" className="text-xs">
+            Real Binance Data
+          </Badge>
+          <span className="text-xs font-medium text-muted-foreground">
+            {timeframe.toUpperCase()} • {historicalData?.length || 0} candles
+          </span>
         </div>
       </div>
 
-      {/* Timeframe indicator */}
-      <div className="absolute bottom-4 left-4 bg-background/90 backdrop-blur-sm rounded-lg px-3 py-1 border">
-        <span className="text-xs font-medium text-muted-foreground">
-          Timeframe: {timeframe.toUpperCase()}
+      {/* Last Update Time */}
+      <div className="absolute bottom-4 right-4 bg-background/95 backdrop-blur-sm rounded-lg px-3 py-2 border">
+        <span className="text-xs text-muted-foreground">
+          Updated: {new Date().toLocaleTimeString()}
         </span>
       </div>
     </div>

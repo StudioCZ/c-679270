@@ -10,88 +10,50 @@ const timeframeMap: Record<string, string> = {
 
 export const useBinanceKlines = (symbol: string, timeframe: string) => {
   return useQuery({
-    queryKey: ['klines', symbol, timeframe],
+    queryKey: ['binance-klines', symbol, timeframe],
     queryFn: async () => {
+      const interval = timeframeMap[timeframe] || '1h';
+      const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=500`;
+      
+      console.log('🔄 Fetching real Binance data:', { symbol, interval, url });
+      
       try {
-        const interval = timeframeMap[timeframe] || '1h';
-        const response = await fetch(
-          `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=500`,
-          {
-            headers: {
-              'Accept': 'application/json',
-            },
-          }
-        );
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+        });
         
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          throw new Error(`Binance API error: ${response.status} ${response.statusText}`);
         }
         
         const data = await response.json();
         
         // Validate the data structure
         if (!Array.isArray(data) || data.length === 0) {
-          throw new Error('Invalid data format received from API');
+          throw new Error('Invalid data format received from Binance API');
         }
+        
+        console.log('✅ Real Binance data fetched successfully:', {
+          symbol,
+          interval,
+          dataPoints: data.length,
+          latestPrice: data[data.length - 1][4]
+        });
         
         return data;
       } catch (error) {
-        console.error('Error fetching Binance data:', error);
-        // Return mock data if API fails
-        return generateMockKlineData(timeframe);
+        console.error('❌ Error fetching real Binance data:', error);
+        throw error; // Re-throw to let React Query handle retries
       }
     },
-    refetchInterval: 60000, // Refetch every minute
-    staleTime: 30000, // Consider data stale after 30 seconds
-    retry: 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    refetchInterval: 30000, // Refetch every 30 seconds for real-time updates
+    staleTime: 15000, // Consider data stale after 15 seconds
+    retry: 5, // Retry failed requests up to 5 times
+    retryDelay: (attemptIndex) => Math.min(1000 * Math.pow(2, attemptIndex), 30000),
+    throwOnError: false, // Don't throw errors to prevent app crashes
   });
-};
-
-const generateMockKlineData = (timeframe: string) => {
-  const data = [];
-  const now = Date.now();
-  const basePrice = 43250;
-  
-  // Adjust interval based on timeframe
-  const intervalMs = getIntervalMs(timeframe);
-  
-  for (let i = 499; i >= 0; i--) {
-    const timestamp = now - (i * intervalMs);
-    const open = basePrice + (Math.random() - 0.5) * 1000;
-    const volatility = Math.random() * 200;
-    const high = open + Math.random() * volatility;
-    const low = open - Math.random() * volatility;
-    const close = low + Math.random() * (high - low);
-    const volume = Math.random() * 100 + 50;
-    
-    data.push([
-      timestamp,
-      open.toFixed(2),
-      high.toFixed(2),
-      low.toFixed(2),
-      close.toFixed(2),
-      volume.toFixed(2),
-      timestamp + intervalMs - 1, // Close time
-      (volume * close).toFixed(2), // Quote asset volume
-      Math.floor(Math.random() * 100), // Number of trades
-      (volume * 0.6).toFixed(2), // Taker buy base asset volume
-      (volume * close * 0.6).toFixed(2), // Taker buy quote asset volume
-      '0' // Ignore
-    ]);
-  }
-  
-  return data;
-};
-
-const getIntervalMs = (timeframe: string): number => {
-  const intervals: Record<string, number> = {
-    '1m': 60 * 1000,
-    '15m': 15 * 60 * 1000,
-    '1h': 60 * 60 * 1000,
-    '4h': 4 * 60 * 60 * 1000,
-    '1d': 24 * 60 * 60 * 1000,
-  };
-  
-  return intervals[timeframe] || intervals['1h'];
 };
