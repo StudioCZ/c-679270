@@ -7,9 +7,9 @@ const TESTNET_SIGNED_PROXY_URL = '/binance-futures-testnet-signed-api';
 const PUBLIC_PROXY_URL = '/binance-futures-api';
 const TESTNET_PUBLIC_PROXY_URL = '/binance-futures-testnet-api';
 
-// WebSocket URLs - Updated to use correct Binance endpoints
+// WebSocket URLs - Updated with correct testnet URL
 const PRODUCTION_WS_URL = 'wss://stream.binance.com:9443';
-const TESTNET_WS_URL = 'wss://fstream.binancefuture.com';
+const TESTNET_WS_URL = 'wss://dstream.binancefuture.com'; // Corrected testnet WebSocket URL
 
 // Get current environment setting
 const isTestnet = import.meta.env.VITE_BINANCE_TESTNET === 'true';
@@ -30,28 +30,67 @@ const isDemoMode = (): boolean => {
          apiSecret === 'demo_mode';
 };
 
+// Check if we have valid API credentials (for testnet, only API key is needed for public endpoints)
+const hasValidCredentials = (): boolean => {
+  const apiKey = import.meta.env.VITE_BINANCE_API_KEY;
+  
+  if (!apiKey || 
+      apiKey === 'your_binance_api_key_here' || 
+      apiKey === 'your_testnet_api_key_here' ||
+      apiKey === 'demo_mode') {
+    return false;
+  }
+  
+  // For testnet, we only need API key for public endpoints
+  if (isTestnet) {
+    return true;
+  }
+  
+  // For production, we need both API key and secret
+  const apiSecret = import.meta.env.VITE_BINANCE_API_SECRET;
+  return !!(apiSecret && 
+           apiSecret !== 'your_binance_api_secret_here' && 
+           apiSecret !== 'your_testnet_secret_key_here' &&
+           apiSecret !== 'demo_mode');
+};
+
 // Validate API credentials
-const validateCredentials = (): { isValid: boolean; message?: string } => {
+const validateCredentials = (requireSecret: boolean = false): { isValid: boolean; message?: string } => {
   const apiKey = import.meta.env.VITE_BINANCE_API_KEY;
   const apiSecret = import.meta.env.VITE_BINANCE_API_SECRET;
   
-  if (!apiKey || !apiSecret) {
+  if (!apiKey) {
     return {
       isValid: false,
-      message: 'Missing Binance API credentials. Please check your .env file and ensure you have VITE_BINANCE_API_KEY and VITE_BINANCE_API_SECRET set.'
+      message: 'Missing Binance API key. Please check your .env file and ensure you have VITE_BINANCE_API_KEY set.'
     };
   }
   
   if (apiKey === 'your_binance_api_key_here' || 
-      apiSecret === 'your_binance_api_secret_here' ||
       apiKey === 'your_testnet_api_key_here' ||
-      apiSecret === 'your_testnet_secret_key_here' ||
-      apiKey === 'demo_mode' ||
-      apiSecret === 'demo_mode') {
+      apiKey === 'demo_mode') {
     return {
       isValid: false,
-      message: 'Please replace placeholder API credentials with your actual Binance API keys. Get your API keys from: Testnet: https://testnet.binancefuture.com/ or Production: https://www.binance.com/en/my/settings/api-management'
+      message: `Please replace placeholder API credentials with your actual Binance API key. Get your API key from: ${isTestnet ? 'https://testnet.binancefuture.com/' : 'https://www.binance.com/en/my/settings/api-management'}`
     };
+  }
+  
+  // For testnet public endpoints, we only need API key
+  if (isTestnet && !requireSecret) {
+    return { isValid: true };
+  }
+  
+  // For production or signed requests, we need both API key and secret
+  if (requireSecret) {
+    if (!apiSecret || 
+        apiSecret === 'your_binance_api_secret_here' ||
+        apiSecret === 'your_testnet_secret_key_here' ||
+        apiSecret === 'demo_mode') {
+      return {
+        isValid: false,
+        message: `API secret is required for signed requests. ${isTestnet ? 'Note: Testnet typically only provides public API keys.' : 'Please add your API secret to the .env file.'}`
+      };
+    }
   }
   
   return { isValid: true };
@@ -276,18 +315,29 @@ const apiRequest = async (
   signed: boolean = false
 ): Promise<any> => {
   // Check if we're in demo mode
-  if (isDemoMode()) {
+  if (!hasValidCredentials()) {
     console.log(`🎭 Demo mode: Returning slower mock data for ${endpoint}`);
     console.log('📝 To use real Binance data:');
-    console.log('1. Get FREE testnet API keys from: https://testnet.binancefuture.com/');
-    console.log('2. Update your .env file with real API credentials');
-    console.log('3. Restart the development server');
+    if (isTestnet) {
+      console.log('1. Get FREE testnet API key from: https://testnet.binancefuture.com/');
+      console.log('2. Update VITE_BINANCE_API_KEY in your .env file');
+      console.log('3. Note: Testnet typically only provides public API keys (no secret needed for public endpoints)');
+    } else {
+      console.log('1. Get API keys from: https://www.binance.com/en/my/settings/api-management');
+      console.log('2. Update both VITE_BINANCE_API_KEY and VITE_BINANCE_API_SECRET in your .env file');
+    }
+    console.log('4. Restart the development server');
     return createMockData(endpoint);
   }
 
   // Validate credentials for real API calls
-  const validation = validateCredentials();
+  const validation = validateCredentials(signed);
   if (!validation.isValid) {
+    // For testnet signed requests that fail, fall back to mock data
+    if (isTestnet && signed) {
+      console.warn(`⚠️ ${validation.message} - Using mock data for signed request`);
+      return createMockData(endpoint);
+    }
     throw new Error(validation.message);
   }
 
@@ -298,11 +348,15 @@ const apiRequest = async (
   // Determine base URL based on signed status and testnet setting
   let baseUrl: string;
   if (signed) {
+    // For testnet, if we don't have a secret, fall back to mock data
+    if (isTestnet && !import.meta.env.VITE_BINANCE_API_SECRET) {
+      console.warn('⚠️ Testnet signed request attempted but no secret available - using mock data');
+      return createMockData(endpoint);
+    }
     baseUrl = isTestnet ? TESTNET_SIGNED_PROXY_URL : SIGNED_PROXY_URL;
-    // Don't set API key header for signed requests - proxy will handle it
   } else {
     baseUrl = isTestnet ? TESTNET_PUBLIC_PROXY_URL : PUBLIC_PROXY_URL;
-    // Set API key for public requests that might need it
+    // Set API key for public requests
     if (API_KEY) {
       headers['X-MBX-APIKEY'] = API_KEY;
     }
@@ -343,16 +397,17 @@ const apiRequest = async (
       if (response.status === 403) {
         console.error('❌ 403 Forbidden - API Access Denied');
         console.error('This usually means:');
-        console.error('1. Invalid API key or secret');
-        console.error('2. API key does not have "Enable Futures" permission');
+        console.error('1. Invalid API key');
+        console.error('2. API key does not have required permissions');
         console.error('3. IP address is not whitelisted (if IP restrictions are enabled)');
         console.error('4. Account is restricted or suspended');
         console.error('');
         console.error('Solutions:');
-        console.error('- Verify your API credentials in the .env file');
-        console.error('- Check that "Enable Futures" is enabled for your API key');
-        console.error('- Try using testnet: VITE_BINANCE_TESTNET=true');
-        console.error('- Check your Binance account status');
+        console.error('- Verify your API key in the .env file');
+        if (!isTestnet) {
+          console.error('- Check that "Enable Futures" is enabled for your API key');
+        }
+        console.error('- Check your account status');
         
         throw new Error(`API Access Denied (403). Please check your API credentials and permissions. Using ${environment} environment.`);
       }
@@ -399,11 +454,11 @@ export const binanceFuturesAPI = {
   getExchangeInfo: () =>
     apiRequest('/fapi/v1/exchangeInfo', 'GET'),
 
-  // Get leverage brackets
+  // Get leverage brackets (requires API key, may not work on testnet without secret)
   getLeverageBrackets: (symbol?: string) =>
     apiRequest('/fapi/v1/leverageBracket', 'GET', symbol ? { symbol } : {}, true),
 
-  // Trading Endpoints (Private - Signed)
+  // Trading Endpoints (Private - Signed) - These will use mock data on testnet without secret
   
   // Create new order
   createOrder: (orderParams: {
@@ -569,7 +624,7 @@ export const createFuturesWebSocketUrl = (streams: string[]): string => {
   const streamString = streams.join('/');
   
   if (isTestnet) {
-    // For testnet, use the futures-specific WebSocket endpoint
+    // For testnet, use the corrected futures-specific WebSocket endpoint
     return `${WS_BASE_URL}/stream?streams=${streamString}`;
   } else {
     // For production, use the general Binance WebSocket endpoint with combined streams

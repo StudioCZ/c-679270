@@ -29,42 +29,49 @@ interface KlineData {
   interval: string;
 }
 
-// Check if we're in demo mode
-const isDemoMode = (): boolean => {
+// Check if we have valid API credentials (for testnet, only API key is needed)
+const hasValidCredentials = (): boolean => {
   const apiKey = import.meta.env.VITE_BINANCE_API_KEY;
-  const apiSecret = import.meta.env.VITE_BINANCE_API_SECRET;
+  const isTestnet = import.meta.env.VITE_BINANCE_TESTNET === 'true';
   
-  return !apiKey || 
-         !apiSecret || 
-         apiKey === 'your_binance_api_key_here' || 
-         apiSecret === 'your_binance_api_secret_here' ||
-         apiKey === 'your_testnet_api_key_here' ||
-         apiSecret === 'your_testnet_secret_key_here' ||
-         apiKey === 'demo_mode' ||
-         apiSecret === 'demo_mode';
+  if (!apiKey || 
+      apiKey === 'your_binance_api_key_here' || 
+      apiKey === 'your_testnet_api_key_here' ||
+      apiKey === 'demo_mode') {
+    return false;
+  }
+  
+  // For testnet, we only need API key
+  if (isTestnet) {
+    return true;
+  }
+  
+  // For production, we need both API key and secret
+  const apiSecret = import.meta.env.VITE_BINANCE_API_SECRET;
+  return !!(apiSecret && 
+           apiSecret !== 'your_binance_api_secret_here' && 
+           apiSecret !== 'your_testnet_secret_key_here' &&
+           apiSecret !== 'demo_mode');
 };
 
 // Validate WebSocket connection prerequisites
 const validateWebSocketSetup = (): { isValid: boolean; message?: string } => {
   const apiKey = import.meta.env.VITE_BINANCE_API_KEY;
-  const apiSecret = import.meta.env.VITE_BINANCE_API_SECRET;
+  const isTestnet = import.meta.env.VITE_BINANCE_TESTNET === 'true';
   
-  if (!apiKey || !apiSecret) {
+  if (!apiKey) {
     return {
       isValid: false,
-      message: 'Missing Binance API credentials for WebSocket connection. Please check your .env file.'
+      message: 'Missing Binance API key for WebSocket connection. Please check your .env file.'
     };
   }
   
   if (apiKey === 'your_binance_api_key_here' || 
-      apiSecret === 'your_binance_api_secret_here' ||
       apiKey === 'your_testnet_api_key_here' ||
-      apiSecret === 'your_testnet_secret_key_here' ||
-      apiKey === 'demo_mode' ||
-      apiSecret === 'demo_mode') {
+      apiKey === 'demo_mode') {
     return {
       isValid: false,
-      message: 'Please replace placeholder API credentials with your actual Binance API keys for WebSocket connection.'
+      message: `Please replace placeholder API credentials with your actual Binance API key. Get your API key from: ${isTestnet ? 'https://testnet.binancefuture.com/' : 'https://www.binance.com/en/my/settings/api-management'}`
     };
   }
   
@@ -202,13 +209,21 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    // Check if we're in demo mode
-    if (isDemoMode()) {
+    const isTestnet = import.meta.env.VITE_BINANCE_TESTNET === 'true';
+    
+    // Check if we have valid credentials
+    if (!hasValidCredentials()) {
       console.log('🎭 Demo mode: Using slower mock WebSocket data simulation');
       console.log('📝 To use real Binance data:');
-      console.log('1. Get FREE testnet API keys from: https://testnet.binancefuture.com/');
-      console.log('2. Update your .env file with real API credentials');
-      console.log('3. Restart the development server');
+      if (isTestnet) {
+        console.log('1. Get FREE testnet API key from: https://testnet.binancefuture.com/');
+        console.log('2. Update VITE_BINANCE_API_KEY in your .env file');
+        console.log('3. Note: Testnet typically only provides public API keys');
+      } else {
+        console.log('1. Get API keys from: https://www.binance.com/en/my/settings/api-management');
+        console.log('2. Update both VITE_BINANCE_API_KEY and VITE_BINANCE_API_SECRET in your .env file');
+      }
+      console.log('4. Restart the development server');
       
       setIsConnected(true);
       setConnectionError('Demo Mode - Using mock data. Update .env file with real API keys to connect to Binance.');
@@ -260,8 +275,9 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
         const streamList = streams.length > 0 ? streams : defaultStreams;
         const wsUrl = createFuturesWebSocketUrl(streamList);
         
-        const environment = import.meta.env.VITE_BINANCE_TESTNET === 'true' ? 'TESTNET' : 'PRODUCTION';
+        const environment = isTestnet ? 'TESTNET' : 'PRODUCTION';
         console.log(`🔄 Connecting to Binance Futures WebSocket [${environment}]:`, wsUrl);
+        console.log(`📡 WebSocket URL: ${WS_BASE_URL}`);
         
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
@@ -373,10 +389,14 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
             console.error('❌ WebSocket connection closed abnormally. This often indicates:');
             console.error('1. Network connectivity issues');
             console.error('2. Firewall blocking WebSocket connections');
-            console.error('3. API access restrictions');
-            console.error('4. Invalid API credentials');
+            console.error('3. Invalid WebSocket URL or endpoint');
+            console.error('4. Server-side connection issues');
+            if (isTestnet) {
+              console.error('5. Testnet WebSocket endpoint may be different or unavailable');
+            }
           } else if (event.code === 1002) {
             console.error('❌ WebSocket protocol error. Check if the WebSocket URL is correct.');
+            console.error(`Current URL: ${wsUrl}`);
           } else if (event.code === 1011) {
             console.error('❌ Server error. Binance WebSocket server encountered an error.');
           }
@@ -396,12 +416,20 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
           setIsConnected(false);
           
           // Provide helpful error message
-          const errorMessage = 'WebSocket connection failed. This usually indicates:\n' +
-            '1. Invalid API credentials\n' +
-            '2. Network or firewall issues\n' +
-            '3. API access restrictions\n' +
-            '4. Server-side issues\n\n' +
-            'Please check your .env file and ensure your API key has "Enable Futures" permission.';
+          let errorMessage = 'WebSocket connection failed. This usually indicates:\n';
+          if (isTestnet) {
+            errorMessage += '1. Testnet WebSocket endpoint may be unavailable\n' +
+              '2. Invalid API key for testnet\n' +
+              '3. Network or firewall issues\n' +
+              '4. Testnet service may be temporarily down\n\n' +
+              'Try switching to production mode or check testnet status.';
+          } else {
+            errorMessage += '1. Invalid API credentials\n' +
+              '2. Network or firewall issues\n' +
+              '3. API access restrictions\n' +
+              '4. Server-side issues\n\n' +
+              'Please check your .env file and ensure your API key has proper permissions.';
+          }
           
           setConnectionError(errorMessage);
         };
