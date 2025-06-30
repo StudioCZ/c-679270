@@ -6,10 +6,21 @@ export const useBinanceFuturesKlines = (symbol: string, interval: string, limit:
   return useQuery({
     queryKey: ['binance-futures-klines', symbol, interval, limit],
     queryFn: () => binanceFuturesAPI.getKlines(symbol, interval, limit),
-    refetchInterval: 30000,
-    staleTime: 15000,
-    retry: 5,
-    retryDelay: (attemptIndex) => Math.min(1000 * Math.pow(2, attemptIndex), 30000),
+    refetchInterval: 30000, // Refetch every 30 seconds
+    staleTime: 15000, // Consider data stale after 15 seconds
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * Math.pow(2, attemptIndex), 10000),
+  });
+};
+
+// Hook for current price
+export const useBinanceFuturesPrice = (symbol: string) => {
+  return useQuery({
+    queryKey: ['binance-futures-price', symbol],
+    queryFn: () => binanceFuturesAPI.getPrice(symbol),
+    refetchInterval: 5000, // Refetch every 5 seconds
+    staleTime: 2000, // Consider data stale after 2 seconds
+    retry: 3,
   });
 };
 
@@ -18,8 +29,8 @@ export const useBinanceFuturesTicker = (symbol: string) => {
   return useQuery({
     queryKey: ['binance-futures-ticker', symbol],
     queryFn: () => binanceFuturesAPI.get24hrTicker(symbol),
-    refetchInterval: 10000,
-    staleTime: 5000,
+    refetchInterval: 10000, // Refetch every 10 seconds
+    staleTime: 5000, // Consider data stale after 5 seconds
     retry: 3,
   });
 };
@@ -29,8 +40,8 @@ export const useBinanceFuturesOrderBook = (symbol: string, limit: number = 20) =
   return useQuery({
     queryKey: ['binance-futures-orderbook', symbol, limit],
     queryFn: () => binanceFuturesAPI.getDepth(symbol, limit),
-    refetchInterval: 5000,
-    staleTime: 2000,
+    refetchInterval: 5000, // Refetch every 5 seconds
+    staleTime: 2000, // Consider data stale after 2 seconds
     retry: 3,
   });
 };
@@ -40,8 +51,8 @@ export const useBinanceFuturesPremiumIndex = (symbol: string) => {
   return useQuery({
     queryKey: ['binance-futures-premium', symbol],
     queryFn: () => binanceFuturesAPI.getPremiumIndex(symbol),
-    refetchInterval: 30000,
-    staleTime: 15000,
+    refetchInterval: 30000, // Refetch every 30 seconds
+    staleTime: 15000, // Consider data stale after 15 seconds
     retry: 3,
   });
 };
@@ -51,8 +62,8 @@ export const useBinanceFuturesOpenInterest = (symbol: string) => {
   return useQuery({
     queryKey: ['binance-futures-oi', symbol],
     queryFn: () => binanceFuturesAPI.getOpenInterest(symbol),
-    refetchInterval: 60000,
-    staleTime: 30000,
+    refetchInterval: 60000, // Refetch every minute
+    staleTime: 30000, // Consider data stale after 30 seconds
     retry: 3,
   });
 };
@@ -62,42 +73,84 @@ export const useBinanceFuturesExchangeInfo = () => {
   return useQuery({
     queryKey: ['binance-futures-exchange-info'],
     queryFn: () => binanceFuturesAPI.getExchangeInfo(),
-    staleTime: 300000, // 5 minutes
+    staleTime: 300000, // 5 minutes - exchange info doesn't change often
     retry: 3,
   });
 };
 
-// Hook for account information (requires API credentials)
-export const useBinanceFuturesAccount = () => {
+// Hook for all tickers
+export const useBinanceFuturesAllTickers = () => {
   return useQuery({
-    queryKey: ['binance-futures-account'],
-    queryFn: () => binanceFuturesAPI.getAccount(),
-    refetchInterval: 30000,
-    staleTime: 15000,
-    retry: 2,
-    enabled: !!(import.meta.env.VITE_BINANCE_API_KEY && import.meta.env.VITE_BINANCE_API_SECRET),
+    queryKey: ['binance-futures-all-tickers'],
+    queryFn: () => binanceFuturesAPI.getAllTickers(),
+    refetchInterval: 30000, // Refetch every 30 seconds
+    staleTime: 15000, // Consider data stale after 15 seconds
+    retry: 3,
   });
 };
 
-// Hook for position risk (requires API credentials)
-export const useBinanceFuturesPositions = (symbol?: string) => {
+// Hook for recent trades
+export const useBinanceFuturesRecentTrades = (symbol: string, limit: number = 100) => {
   return useQuery({
-    queryKey: ['binance-futures-positions', symbol],
-    queryFn: () => binanceFuturesAPI.getPositionRisk(symbol),
-    refetchInterval: 15000,
-    staleTime: 10000,
-    retry: 2,
-    enabled: !!(import.meta.env.VITE_BINANCE_API_KEY && import.meta.env.VITE_BINANCE_API_SECRET),
+    queryKey: ['binance-futures-recent-trades', symbol, limit],
+    queryFn: () => binanceFuturesAPI.getRecentTrades(symbol, limit),
+    refetchInterval: 10000, // Refetch every 10 seconds
+    staleTime: 5000, // Consider data stale after 5 seconds
+    retry: 3,
   });
 };
 
-// Hook for leverage brackets
-export const useBinanceFuturesLeverageBrackets = (symbol?: string) => {
+// Hook for aggregate trades
+export const useBinanceFuturesAggTrades = (symbol: string, limit: number = 100) => {
   return useQuery({
-    queryKey: ['binance-futures-leverage-brackets', symbol],
-    queryFn: () => binanceFuturesAPI.getLeverageBrackets(symbol),
-    staleTime: 300000, // 5 minutes
-    retry: 2,
-    enabled: !!(import.meta.env.VITE_BINANCE_API_KEY && import.meta.env.VITE_BINANCE_API_SECRET),
+    queryKey: ['binance-futures-agg-trades', symbol, limit],
+    queryFn: () => binanceFuturesAPI.getAggTrades(symbol, limit),
+    refetchInterval: 10000, // Refetch every 10 seconds
+    staleTime: 5000, // Consider data stale after 5 seconds
+    retry: 3,
+  });
+};
+
+// Hook for funding rate history
+export const useBinanceFuturesFundingHistory = (symbol: string, limit: number = 100) => {
+  return useQuery({
+    queryKey: ['binance-futures-funding-history', symbol, limit],
+    queryFn: () => binanceFuturesAPI.getFundingRateHistory(symbol, limit),
+    refetchInterval: 300000, // Refetch every 5 minutes
+    staleTime: 180000, // Consider data stale after 3 minutes
+    retry: 3,
+  });
+};
+
+// Hook for open interest statistics
+export const useBinanceFuturesOpenInterestStats = (symbol: string, period: string = '5m', limit: number = 30) => {
+  return useQuery({
+    queryKey: ['binance-futures-oi-stats', symbol, period, limit],
+    queryFn: () => binanceFuturesAPI.getOpenInterestStats(symbol, period, limit),
+    refetchInterval: 300000, // Refetch every 5 minutes
+    staleTime: 180000, // Consider data stale after 3 minutes
+    retry: 3,
+  });
+};
+
+// Hook for top trader long/short ratio
+export const useBinanceFuturesTopTraderRatio = (symbol: string, period: string = '5m', limit: number = 30) => {
+  return useQuery({
+    queryKey: ['binance-futures-top-trader-ratio', symbol, period, limit],
+    queryFn: () => binanceFuturesAPI.getTopTraderRatio(symbol, period, limit),
+    refetchInterval: 300000, // Refetch every 5 minutes
+    staleTime: 180000, // Consider data stale after 3 minutes
+    retry: 3,
+  });
+};
+
+// Hook for global long/short ratio
+export const useBinanceFuturesGlobalRatio = (symbol: string, period: string = '5m', limit: number = 30) => {
+  return useQuery({
+    queryKey: ['binance-futures-global-ratio', symbol, period, limit],
+    queryFn: () => binanceFuturesAPI.getGlobalLongShortRatio(symbol, period, limit),
+    refetchInterval: 300000, // Refetch every 5 minutes
+    staleTime: 180000, // Consider data stale after 3 minutes
+    retry: 3,
   });
 };

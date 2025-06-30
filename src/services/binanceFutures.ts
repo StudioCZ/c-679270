@@ -1,446 +1,83 @@
-// Environment variables for API credentials (used only for client-side headers, secrets handled by proxy)
-const API_KEY = import.meta.env.VITE_BINANCE_API_KEY || '';
+// Binance Futures Public API Service
+// Uses only public endpoints - no authentication required
 
-// Proxy URLs (no direct API URLs needed since we use proxies)
-const SIGNED_PROXY_URL = '/binance-futures-signed-api';
-const TESTNET_SIGNED_PROXY_URL = '/binance-futures-testnet-signed-api';
-const PUBLIC_PROXY_URL = '/binance-futures-api';
-const TESTNET_PUBLIC_PROXY_URL = '/binance-futures-testnet-api';
+// Base URLs for public API endpoints
+const PRODUCTION_BASE_URL = 'https://fapi.binance.com';
+const TESTNET_BASE_URL = 'https://testnet.binancefuture.com';
 
-// WebSocket URLs - Updated with correct testnet URL
-const PRODUCTION_WS_URL = 'wss://stream.binance.com:9443';
-const TESTNET_WS_URL = 'wss://dstream.binancefuture.com'; // Corrected testnet WebSocket URL
+// WebSocket URLs for real-time data
+const PRODUCTION_WS_URL = 'wss://fstream.binance.com';
+const TESTNET_WS_URL = 'wss://fstream.binance.com'; // Same for testnet
 
-// Get current environment setting
+// Get current environment setting (defaults to production for public API)
 const isTestnet = import.meta.env.VITE_BINANCE_TESTNET === 'true';
+const BASE_URL = isTestnet ? TESTNET_BASE_URL : PRODUCTION_BASE_URL;
 export const WS_BASE_URL = isTestnet ? TESTNET_WS_URL : PRODUCTION_WS_URL;
 
-// Check if we're in demo mode
-const isDemoMode = (): boolean => {
-  const apiKey = import.meta.env.VITE_BINANCE_API_KEY;
-  const apiSecret = import.meta.env.VITE_BINANCE_API_SECRET;
-  
-  return !apiKey || 
-         !apiSecret || 
-         apiKey === 'your_binance_api_key_here' || 
-         apiSecret === 'your_binance_api_secret_here' ||
-         apiKey === 'your_testnet_api_key_here' ||
-         apiSecret === 'your_testnet_secret_key_here' ||
-         apiKey === 'demo_mode' ||
-         apiSecret === 'demo_mode';
-};
-
-// Check if we have valid API credentials (for testnet, only API key is needed for public endpoints)
-const hasValidCredentials = (): boolean => {
-  const apiKey = import.meta.env.VITE_BINANCE_API_KEY;
-  
-  if (!apiKey || 
-      apiKey === 'your_binance_api_key_here' || 
-      apiKey === 'your_testnet_api_key_here' ||
-      apiKey === 'demo_mode') {
-    return false;
-  }
-  
-  // For testnet, we only need API key for public endpoints
-  if (isTestnet) {
-    return true;
-  }
-  
-  // For production, we need both API key and secret
-  const apiSecret = import.meta.env.VITE_BINANCE_API_SECRET;
-  return !!(apiSecret && 
-           apiSecret !== 'your_binance_api_secret_here' && 
-           apiSecret !== 'your_testnet_secret_key_here' &&
-           apiSecret !== 'demo_mode');
-};
-
-// Validate API credentials
-const validateCredentials = (requireSecret: boolean = false): { isValid: boolean; message?: string } => {
-  const apiKey = import.meta.env.VITE_BINANCE_API_KEY;
-  const apiSecret = import.meta.env.VITE_BINANCE_API_SECRET;
-  
-  if (!apiKey) {
-    return {
-      isValid: false,
-      message: 'Missing Binance API key. Please check your .env file and ensure you have VITE_BINANCE_API_KEY set.'
-    };
-  }
-  
-  if (apiKey === 'your_binance_api_key_here' || 
-      apiKey === 'your_testnet_api_key_here' ||
-      apiKey === 'demo_mode') {
-    return {
-      isValid: false,
-      message: `Please replace placeholder API credentials with your actual Binance API key. Get your API key from: ${isTestnet ? 'https://testnet.binancefuture.com/' : 'https://www.binance.com/en/my/settings/api-management'}`
-    };
-  }
-  
-  // For testnet public endpoints, we only need API key
-  if (isTestnet && !requireSecret) {
-    return { isValid: true };
-  }
-  
-  // For production or signed requests, we need both API key and secret
-  if (requireSecret) {
-    if (!apiSecret || 
-        apiSecret === 'your_binance_api_secret_here' ||
-        apiSecret === 'your_testnet_secret_key_here' ||
-        apiSecret === 'demo_mode') {
-      return {
-        isValid: false,
-        message: `API secret is required for signed requests. ${isTestnet ? 'Note: Testnet typically only provides public API keys.' : 'Please add your API secret to the .env file.'}`
-      };
-    }
-  }
-  
-  return { isValid: true };
-};
-
-// Mock data simulator for consistent demo data (slower updates)
-class MockDataSimulator {
-  private static instance: MockDataSimulator;
-  private basePrice: number = 43250.00;
-  private currentPrice: number = 43250.00;
-  private openPrice: number = 43100.00;
-  private high24h: number = 43800.00;
-  private low24h: number = 42900.00;
-  private volume: number = 15234.567;
-  private count: number = 125678;
-  private fundingRate: number = 0.0001;
-  private trend: number = 1;
-  private volatility: number = 0.00005; // Much lower volatility
-  private lastUpdate: number = Date.now();
-
-  private constructor() {
-    // Singleton pattern to ensure consistent data across all components
-  }
-
-  public static getInstance(): MockDataSimulator {
-    if (!MockDataSimulator.instance) {
-      MockDataSimulator.instance = new MockDataSimulator();
-    }
-    return MockDataSimulator.instance;
-  }
-
-  private resetTrend() {
-    // Change trend very rarely (every 5-10 minutes on average)
-    if (Math.random() < 0.002) {
-      this.trend *= -1;
-      this.volatility = 0.00002 + Math.random() * 0.00008; // 0.002% to 0.01% volatility
-    }
-  }
-
-  getNextPrice(): number {
-    const now = Date.now();
-    const timeDiff = now - this.lastUpdate;
-    
-    // Only update if enough time has passed (minimum 1 minute)
-    if (timeDiff < 60000) {
-      return this.currentPrice;
-    }
-    
-    this.lastUpdate = now;
-    this.resetTrend();
-    
-    const randomFactor = (Math.random() - 0.5) * 2;
-    const trendFactor = this.trend * 0.1;
-    const priceChange = this.currentPrice * this.volatility * (randomFactor + trendFactor);
-    
-    this.currentPrice += priceChange;
-    this.currentPrice = Math.max(this.low24h * 0.999, Math.min(this.high24h * 1.001, this.currentPrice));
-    
-    // Very rarely update bounds
-    if (Math.random() < 0.005) {
-      if (this.currentPrice > this.high24h) {
-        this.high24h = this.currentPrice;
-      }
-      if (this.currentPrice < this.low24h) {
-        this.low24h = this.currentPrice;
-      }
-    }
-    
-    return this.currentPrice;
-  }
-
-  getCurrentData() {
-    const price = this.getNextPrice();
-    const priceChange = price - this.openPrice;
-    const priceChangePercent = (priceChange / this.openPrice) * 100;
-    
-    // Very slowly increment counters
-    this.volume += Math.random() * 0.1;
-    this.count += Math.floor(Math.random() * 1);
-    
-    // Very slightly vary funding rate
-    this.fundingRate += (Math.random() - 0.5) * 0.000001;
-    this.fundingRate = Math.max(-0.001, Math.min(0.001, this.fundingRate));
-    
-    return {
-      price,
-      priceChange,
-      priceChangePercent,
-      volume: this.volume,
-      high24h: this.high24h,
-      low24h: this.low24h,
-      openPrice: this.openPrice,
-      count: this.count,
-      fundingRate: this.fundingRate,
-    };
-  }
-}
-
-// Create mock data for demo mode using the simulator
-const createMockData = (endpoint: string): any => {
-  const simulator = MockDataSimulator.getInstance();
-  const currentData = simulator.getCurrentData();
-
-  if (endpoint.includes('/fapi/v1/ticker/24hr')) {
-    return {
-      symbol: 'BTCUSDT',
-      priceChange: currentData.priceChange.toFixed(2),
-      priceChangePercent: currentData.priceChangePercent.toFixed(2),
-      weightedAvgPrice: currentData.price.toFixed(2),
-      prevClosePrice: currentData.openPrice.toFixed(2),
-      lastPrice: currentData.price.toFixed(2),
-      lastQty: '0.001',
-      bidPrice: (currentData.price - 0.01).toFixed(2),
-      askPrice: (currentData.price + 0.01).toFixed(2),
-      openPrice: currentData.openPrice.toFixed(2),
-      highPrice: currentData.high24h.toFixed(2),
-      lowPrice: currentData.low24h.toFixed(2),
-      volume: currentData.volume.toFixed(3),
-      quoteVolume: (currentData.volume * currentData.price).toFixed(2),
-      openTime: Date.now() - 86400000,
-      closeTime: Date.now(),
-      firstId: 123456789,
-      lastId: 123456790,
-      count: currentData.count
-    };
-  }
-  
-  if (endpoint.includes('/fapi/v1/klines')) {
-    const now = Date.now();
-    const mockKlines = [];
-    const basePrice = currentData.price;
-    
-    for (let i = 0; i < 100; i++) {
-      const time = now - (i * 3600000);
-      const priceVariation = (Math.random() - 0.5) * 50; // Smaller variations
-      const candlePrice = basePrice + priceVariation;
-      
-      mockKlines.unshift([
-        time,
-        candlePrice.toFixed(2),
-        (candlePrice + Math.random() * 25).toFixed(2),
-        (candlePrice - Math.random() * 25).toFixed(2),
-        (candlePrice + (Math.random() - 0.5) * 10).toFixed(2),
-        (Math.random() * 50).toFixed(3),
-        time + 3599999,
-        (Math.random() * 500000).toFixed(2),
-        Math.floor(Math.random() * 500),
-        (Math.random() * 25).toFixed(3),
-        (Math.random() * 250000).toFixed(2),
-        '0'
-      ]);
-    }
-    return mockKlines;
-  }
-  
-  if (endpoint.includes('/fapi/v1/premiumIndex')) {
-    return {
-      symbol: 'BTCUSDT',
-      markPrice: currentData.price.toFixed(2),
-      indexPrice: (currentData.price - 0.05).toFixed(2),
-      estimatedSettlePrice: (currentData.price - 0.02).toFixed(2),
-      lastFundingRate: currentData.fundingRate.toFixed(8),
-      nextFundingTime: Date.now() + 3600000,
-      interestRate: '0.00010000',
-      time: Date.now()
-    };
-  }
-  
-  if (endpoint.includes('/fapi/v1/openInterest')) {
-    return {
-      openInterest: '123456.789',
-      symbol: 'BTCUSDT',
-      time: Date.now()
-    };
-  }
-  
-  if (endpoint.includes('/fapi/v1/depth')) {
-    const basePrice = currentData.price;
-    const bids = [];
-    const asks = [];
-    
-    for (let i = 0; i < 20; i++) {
-      bids.push([
-        (basePrice - i * 0.01).toFixed(2),
-        (Math.random() * 5).toFixed(3)
-      ]);
-      asks.push([
-        (basePrice + i * 0.01).toFixed(2),
-        (Math.random() * 5).toFixed(3)
-      ]);
-    }
-    
-    return {
-      lastUpdateId: Date.now(),
-      bids,
-      asks
-    };
-  }
-  
-  return {
-    message: 'Demo mode - mock data',
-    timestamp: Date.now()
-  };
-};
-
-// Create parameters with timestamp (signature will be added by proxy)
-const createSignedParams = (params: Record<string, any> = {}): string => {
-  const timestamp = Date.now();
-  const queryString = new URLSearchParams({
-    ...params,
-    timestamp: timestamp.toString(),
-  }).toString();
-  
-  return queryString;
-};
-
-// Generic API request function
+// Generic API request function for public endpoints only
 const apiRequest = async (
   endpoint: string,
-  method: 'GET' | 'POST' | 'DELETE' = 'GET',
-  params: Record<string, any> = {},
-  signed: boolean = false
+  method: 'GET' = 'GET',
+  params: Record<string, any> = {}
 ): Promise<any> => {
-  // Check if we're in demo mode
-  if (!hasValidCredentials()) {
-    console.log(`🎭 Demo mode: Returning slower mock data for ${endpoint}`);
-    console.log('📝 To use real Binance data:');
-    if (isTestnet) {
-      console.log('1. Get FREE testnet API key from: https://testnet.binancefuture.com/');
-      console.log('2. Update VITE_BINANCE_API_KEY in your .env file');
-      console.log('3. Note: Testnet typically only provides public API keys (no secret needed for public endpoints)');
-    } else {
-      console.log('1. Get API keys from: https://www.binance.com/en/my/settings/api-management');
-      console.log('2. Update both VITE_BINANCE_API_KEY and VITE_BINANCE_API_SECRET in your .env file');
-    }
-    console.log('4. Restart the development server');
-    return createMockData(endpoint);
-  }
-
-  // Validate credentials for real API calls
-  const validation = validateCredentials(signed);
-  if (!validation.isValid) {
-    // For testnet signed requests that fail, fall back to mock data
-    if (isTestnet && signed) {
-      console.warn(`⚠️ ${validation.message} - Using mock data for signed request`);
-      return createMockData(endpoint);
-    }
-    throw new Error(validation.message);
-  }
-
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
   };
 
-  // Determine base URL based on signed status and testnet setting
-  let baseUrl: string;
-  if (signed) {
-    // For testnet, if we don't have a secret, fall back to mock data
-    if (isTestnet && !import.meta.env.VITE_BINANCE_API_SECRET) {
-      console.warn('⚠️ Testnet signed request attempted but no secret available - using mock data');
-      return createMockData(endpoint);
-    }
-    baseUrl = isTestnet ? TESTNET_SIGNED_PROXY_URL : SIGNED_PROXY_URL;
-  } else {
-    baseUrl = isTestnet ? TESTNET_PUBLIC_PROXY_URL : PUBLIC_PROXY_URL;
-    // Set API key for public requests
-    if (API_KEY) {
-      headers['X-MBX-APIKEY'] = API_KEY;
-    }
-  }
-
-  let url = `${baseUrl}${endpoint}`;
-  let body: string | undefined;
-
-  if (signed) {
-    // For signed requests, prepare parameters with timestamp
-    const signedParams = createSignedParams(params);
-    if (method === 'GET' || method === 'DELETE') {
-      url += `?${signedParams}`;
-    } else {
-      body = signedParams;
-      headers['Content-Type'] = 'application/x-www-form-urlencoded';
-    }
-  } else if (Object.keys(params).length > 0) {
-    // For public requests, just add query parameters
+  let url = `${BASE_URL}${endpoint}`;
+  
+  if (Object.keys(params).length > 0) {
     const queryString = new URLSearchParams(params).toString();
     url += `?${queryString}`;
   }
 
   const environment = isTestnet ? 'TESTNET' : 'PRODUCTION';
-  console.log(`🔄 Binance Futures API ${method} ${endpoint} [${environment}]`, { params, signed });
+  console.log(`🔄 Binance Futures Public API ${method} ${endpoint} [${environment}]`, { params });
 
   try {
     const response = await fetch(url, {
       method,
       headers,
-      body,
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       
       // Provide specific error messages for common issues
-      if (response.status === 403) {
-        console.error('❌ 403 Forbidden - API Access Denied');
-        console.error('This usually means:');
-        console.error('1. Invalid API key');
-        console.error('2. API key does not have required permissions');
-        console.error('3. IP address is not whitelisted (if IP restrictions are enabled)');
-        console.error('4. Account is restricted or suspended');
-        console.error('');
-        console.error('Solutions:');
-        console.error('- Verify your API key in the .env file');
-        if (!isTestnet) {
-          console.error('- Check that "Enable Futures" is enabled for your API key');
-        }
-        console.error('- Check your account status');
-        
-        throw new Error(`API Access Denied (403). Please check your API credentials and permissions. Using ${environment} environment.`);
+      if (response.status === 429) {
+        throw new Error(`Rate limit exceeded. Please wait before making more requests.`);
       }
       
-      if (response.status === 401) {
-        throw new Error(`Unauthorized (401). Please check your API key and signature. Using ${environment} environment.`);
+      if (response.status >= 500) {
+        throw new Error(`Binance server error (${response.status}). Please try again later.`);
       }
       
-      throw new Error(`Binance Futures API error: ${response.status} ${response.statusText} - ${errorText}`);
+      throw new Error(`Binance API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json();
-    console.log(`✅ Binance Futures API response [${environment}]:`, data);
+    console.log(`✅ Binance Futures Public API response [${environment}]:`, data);
     return data;
   } catch (error) {
-    console.error(`❌ Binance Futures API error [${environment}]:`, error);
+    console.error(`❌ Binance Futures Public API error [${environment}]:`, error);
     throw error;
   }
 };
 
-// Market Data Endpoints (Public)
+// Public Market Data Endpoints (No authentication required)
 export const binanceFuturesAPI = {
   // Get klines/candlestick data
   getKlines: (symbol: string, interval: string, limit: number = 500) =>
     apiRequest('/fapi/v1/klines', 'GET', { symbol, interval, limit }),
 
+  // Get current price for a symbol
+  getPrice: (symbol: string) =>
+    apiRequest('/fapi/v1/ticker/price', 'GET', { symbol }),
+
   // Get order book depth
   getDepth: (symbol: string, limit: number = 100) =>
     apiRequest('/fapi/v1/depth', 'GET', { symbol, limit }),
-
-  // Get 24hr ticker statistics
-  get24hrTicker: (symbol: string) =>
-    apiRequest('/fapi/v1/ticker/24hr', 'GET', { symbol }),
 
   // Get premium index and funding rate
   getPremiumIndex: (symbol: string) =>
@@ -450,199 +87,216 @@ export const binanceFuturesAPI = {
   getOpenInterest: (symbol: string) =>
     apiRequest('/fapi/v1/openInterest', 'GET', { symbol }),
 
+  // Get 24hr ticker statistics
+  get24hrTicker: (symbol: string) =>
+    apiRequest('/fapi/v1/ticker/24hr', 'GET', { symbol }),
+
   // Get exchange info
   getExchangeInfo: () =>
     apiRequest('/fapi/v1/exchangeInfo', 'GET'),
 
-  // Get leverage brackets (requires API key, may not work on testnet without secret)
-  getLeverageBrackets: (symbol?: string) =>
-    apiRequest('/fapi/v1/leverageBracket', 'GET', symbol ? { symbol } : {}, true),
+  // Get all 24hr tickers
+  getAllTickers: () =>
+    apiRequest('/fapi/v1/ticker/24hr', 'GET'),
 
-  // Trading Endpoints (Private - Signed) - These will use mock data on testnet without secret
-  
-  // Create new order
-  createOrder: (orderParams: {
-    symbol: string;
-    side: 'BUY' | 'SELL';
-    type: 'LIMIT' | 'MARKET' | 'STOP' | 'TAKE_PROFIT' | 'STOP_MARKET' | 'TAKE_PROFIT_MARKET';
-    quantity?: string;
-    price?: string;
-    timeInForce?: 'GTC' | 'IOC' | 'FOK' | 'GTX';
-    stopPrice?: string;
-    closePosition?: boolean;
-    activationPrice?: string;
-    callbackRate?: string;
-    workingType?: 'MARK_PRICE' | 'CONTRACT_PRICE';
-    priceProtect?: boolean;
-    newOrderRespType?: 'ACK' | 'RESULT';
-    reduceOnly?: boolean;
-  }) =>
-    apiRequest('/fapi/v1/order', 'POST', orderParams, true),
+  // Get recent trades
+  getRecentTrades: (symbol: string, limit: number = 500) =>
+    apiRequest('/fapi/v1/trades', 'GET', { symbol, limit }),
 
-  // Cancel order
-  cancelOrder: (symbol: string, orderId?: number, origClientOrderId?: string) =>
-    apiRequest('/fapi/v1/order', 'DELETE', { 
-      symbol, 
-      ...(orderId && { orderId }),
-      ...(origClientOrderId && { origClientOrderId })
-    }, true),
+  // Get aggregate trades
+  getAggTrades: (symbol: string, limit: number = 500) =>
+    apiRequest('/fapi/v1/aggTrades', 'GET', { symbol, limit }),
 
-  // Cancel all orders
-  cancelAllOrders: (symbol: string) =>
-    apiRequest('/fapi/v1/allOpenOrders', 'DELETE', { symbol }, true),
+  // Get funding rate history
+  getFundingRateHistory: (symbol: string, limit: number = 100) =>
+    apiRequest('/fapi/v1/fundingRate', 'GET', { symbol, limit }),
 
-  // Get account information
-  getAccount: () =>
-    apiRequest('/fapi/v2/account', 'GET', {}, true),
+  // Get open interest statistics
+  getOpenInterestStats: (symbol: string, period: string = '5m', limit: number = 30) =>
+    apiRequest('/fapi/v1/openInterestHist', 'GET', { symbol, period, limit }),
 
-  // Get position risk
-  getPositionRisk: (symbol?: string) =>
-    apiRequest('/fapi/v2/positionRisk', 'GET', symbol ? { symbol } : {}, true),
+  // Get top trader long/short ratio
+  getTopTraderRatio: (symbol: string, period: string = '5m', limit: number = 30) =>
+    apiRequest('/fapi/v1/topLongShortPositionRatio', 'GET', { symbol, period, limit }),
 
-  // Get all orders
-  getAllOrders: (symbol: string, orderId?: number, startTime?: number, endTime?: number, limit?: number) =>
-    apiRequest('/fapi/v1/allOrders', 'GET', {
-      symbol,
-      ...(orderId && { orderId }),
-      ...(startTime && { startTime }),
-      ...(endTime && { endTime }),
-      ...(limit && { limit })
-    }, true),
-
-  // Change leverage
-  changeLeverage: (symbol: string, leverage: number) =>
-    apiRequest('/fapi/v1/leverage', 'POST', { symbol, leverage }, true),
-
-  // Change margin type
-  changeMarginType: (symbol: string, marginType: 'ISOLATED' | 'CROSSED') =>
-    apiRequest('/fapi/v1/marginType', 'POST', { symbol, marginType }, true),
-
-  // User Data Stream
-  
-  // Create listen key for user data stream
-  createListenKey: () =>
-    apiRequest('/fapi/v1/listenKey', 'POST', {}, true),
-
-  // Keep alive listen key
-  keepAliveListenKey: (listenKey: string) =>
-    apiRequest('/fapi/v1/listenKey', 'PUT', { listenKey }, true),
-
-  // Delete listen key
-  deleteListenKey: (listenKey: string) =>
-    apiRequest('/fapi/v1/listenKey', 'DELETE', { listenKey }, true),
+  // Get global long/short ratio
+  getGlobalLongShortRatio: (symbol: string, period: string = '5m', limit: number = 30) =>
+    apiRequest('/fapi/v1/globalLongShortAccountRatio', 'GET', { symbol, period, limit }),
 };
 
-// Risk management utilities
-export const riskManagement = {
-  // Validate order against exchange rules
-  validateOrder: async (symbol: string, quantity: number, price?: number) => {
-    try {
-      const exchangeInfo = await binanceFuturesAPI.getExchangeInfo();
-      const symbolInfo = exchangeInfo.symbols.find((s: any) => s.symbol === symbol);
-      
-      if (!symbolInfo) {
-        throw new Error(`Symbol ${symbol} not found`);
-      }
-
-      // Check quantity precision and limits
-      const lotSizeFilter = symbolInfo.filters.find((f: any) => f.filterType === 'LOT_SIZE');
-      const minNotionalFilter = symbolInfo.filters.find((f: any) => f.filterType === 'MIN_NOTIONAL');
-      
-      if (lotSizeFilter) {
-        const minQty = parseFloat(lotSizeFilter.minQty);
-        const maxQty = parseFloat(lotSizeFilter.maxQty);
-        const stepSize = parseFloat(lotSizeFilter.stepSize);
-        
-        if (quantity < minQty || quantity > maxQty) {
-          throw new Error(`Quantity must be between ${minQty} and ${maxQty}`);
-        }
-        
-        // Check step size
-        const remainder = (quantity - minQty) % stepSize;
-        if (remainder !== 0) {
-          throw new Error(`Quantity must be a multiple of ${stepSize}`);
-        }
-      }
-
-      // Check price filters if price is provided
-      if (price) {
-        const priceFilter = symbolInfo.filters.find((f: any) => f.filterType === 'PRICE_FILTER');
-        if (priceFilter) {
-          const minPrice = parseFloat(priceFilter.minPrice);
-          const maxPrice = parseFloat(priceFilter.maxPrice);
-          const tickSize = parseFloat(priceFilter.tickSize);
-          
-          if (price < minPrice || price > maxPrice) {
-            throw new Error(`Price must be between ${minPrice} and ${maxPrice}`);
-          }
-          
-          // Check tick size
-          const remainder = (price - minPrice) % tickSize;
-          if (remainder !== 0) {
-            throw new Error(`Price must be a multiple of ${tickSize}`);
-          }
-        }
-      }
-
-      // Check minimum notional
-      if (minNotionalFilter && price) {
-        const minNotional = parseFloat(minNotionalFilter.notional);
-        const notional = quantity * price;
-        if (notional < minNotional) {
-          throw new Error(`Order notional must be at least ${minNotional}`);
-        }
-      }
-
-      return true;
-    } catch (error) {
-      console.error('❌ Order validation failed:', error);
-      throw error;
-    }
-  },
-
-  // Check if price is within acceptable range of mark price
-  validatePriceDeviation: async (symbol: string, orderPrice: number, maxDeviation: number = 0.003) => {
-    try {
-      const premiumIndex = await binanceFuturesAPI.getPremiumIndex(symbol);
-      const markPrice = parseFloat(premiumIndex.markPrice);
-      const deviation = Math.abs(orderPrice - markPrice) / markPrice;
-      
-      if (deviation > maxDeviation) {
-        throw new Error(`Price deviation ${(deviation * 100).toFixed(2)}% exceeds maximum ${(maxDeviation * 100).toFixed(2)}%`);
-      }
-      
-      return true;
-    } catch (error) {
-      console.error('❌ Price deviation check failed:', error);
-      throw error;
-    }
-  },
-};
-
-// WebSocket stream utilities - Updated for correct Binance endpoints
+// WebSocket stream utilities
 export const createFuturesWebSocketUrl = (streams: string[]): string => {
-  const streamString = streams.join('/');
-  
-  if (isTestnet) {
-    // For testnet, use the corrected futures-specific WebSocket endpoint
-    return `${WS_BASE_URL}/stream?streams=${streamString}`;
+  if (streams.length === 1) {
+    // Single stream
+    return `${WS_BASE_URL}/ws/${streams[0]}`;
   } else {
-    // For production, use the general Binance WebSocket endpoint with combined streams
+    // Combined streams
+    const streamString = streams.join('/');
     return `${WS_BASE_URL}/stream?streams=${streamString}`;
   }
 };
 
-// Common stream names for BTCUSDT - Updated for correct format
+// Common stream names for BTCUSDT
 export const BTCUSDT_STREAMS = {
   kline_1m: 'btcusdt@kline_1m',
+  kline_5m: 'btcusdt@kline_5m',
   kline_15m: 'btcusdt@kline_15m',
   kline_1h: 'btcusdt@kline_1h',
   kline_4h: 'btcusdt@kline_4h',
   kline_1d: 'btcusdt@kline_1d',
   ticker: 'btcusdt@ticker',
+  miniTicker: 'btcusdt@miniTicker',
   aggTrade: 'btcusdt@aggTrade',
+  trade: 'btcusdt@trade',
+  depth5: 'btcusdt@depth5@100ms',
+  depth10: 'btcusdt@depth10@100ms',
+  depth20: 'btcusdt@depth20@100ms',
   depth: 'btcusdt@depth@100ms',
   markPrice: 'btcusdt@markPrice@1s',
+  indexPrice: 'btcusdt@indexPrice@1s',
+  forceOrder: 'btcusdt@forceOrder',
+};
+
+// Utility functions for data processing
+export const dataUtils = {
+  // Format price with appropriate decimal places
+  formatPrice: (price: number | string): string => {
+    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+    if (numPrice >= 1000) {
+      return numPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    } else if (numPrice >= 1) {
+      return numPrice.toFixed(4);
+    } else {
+      return numPrice.toFixed(8);
+    }
+  },
+
+  // Format volume
+  formatVolume: (volume: number | string): string => {
+    const numVolume = typeof volume === 'string' ? parseFloat(volume) : volume;
+    if (numVolume >= 1000000) {
+      return `${(numVolume / 1000000).toFixed(2)}M`;
+    } else if (numVolume >= 1000) {
+      return `${(numVolume / 1000).toFixed(2)}K`;
+    } else {
+      return numVolume.toFixed(2);
+    }
+  },
+
+  // Format percentage
+  formatPercentage: (percentage: number | string): string => {
+    const numPercentage = typeof percentage === 'string' ? parseFloat(percentage) : percentage;
+    const sign = numPercentage >= 0 ? '+' : '';
+    return `${sign}${numPercentage.toFixed(2)}%`;
+  },
+
+  // Calculate price change color
+  getPriceChangeColor: (change: number | string): string => {
+    const numChange = typeof change === 'string' ? parseFloat(change) : change;
+    if (numChange > 0) return 'text-green-400';
+    if (numChange < 0) return 'text-red-400';
+    return 'text-gray-400';
+  },
+
+  // Convert timestamp to readable time
+  formatTime: (timestamp: number): string => {
+    return new Date(timestamp).toLocaleTimeString();
+  },
+
+  // Convert timestamp to readable date
+  formatDate: (timestamp: number): string => {
+    return new Date(timestamp).toLocaleDateString();
+  },
+
+  // Calculate funding rate in percentage
+  formatFundingRate: (rate: number | string): string => {
+    const numRate = typeof rate === 'string' ? parseFloat(rate) : rate;
+    return `${(numRate * 100).toFixed(4)}%`;
+  },
+
+  // Calculate next funding time
+  getNextFundingTime: (timestamp: number): string => {
+    const now = Date.now();
+    const diff = timestamp - now;
+    
+    if (diff <= 0) return 'Now';
+    
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else {
+      return `${minutes}m`;
+    }
+  },
+};
+
+// Market analysis utilities
+export const marketAnalysis = {
+  // Calculate RSI (simplified)
+  calculateRSI: (prices: number[], period: number = 14): number => {
+    if (prices.length < period + 1) return 50;
+    
+    let gains = 0;
+    let losses = 0;
+    
+    for (let i = 1; i <= period; i++) {
+      const change = prices[prices.length - i] - prices[prices.length - i - 1];
+      if (change > 0) {
+        gains += change;
+      } else {
+        losses += Math.abs(change);
+      }
+    }
+    
+    const avgGain = gains / period;
+    const avgLoss = losses / period;
+    
+    if (avgLoss === 0) return 100;
+    
+    const rs = avgGain / avgLoss;
+    return 100 - (100 / (1 + rs));
+  },
+
+  // Calculate moving average
+  calculateMA: (prices: number[], period: number): number => {
+    if (prices.length < period) return prices[prices.length - 1] || 0;
+    
+    const sum = prices.slice(-period).reduce((acc, price) => acc + price, 0);
+    return sum / period;
+  },
+
+  // Calculate volatility
+  calculateVolatility: (prices: number[], period: number = 20): number => {
+    if (prices.length < period) return 0;
+    
+    const recentPrices = prices.slice(-period);
+    const mean = recentPrices.reduce((acc, price) => acc + price, 0) / period;
+    
+    const variance = recentPrices.reduce((acc, price) => {
+      return acc + Math.pow(price - mean, 2);
+    }, 0) / period;
+    
+    return Math.sqrt(variance);
+  },
+
+  // Determine market trend
+  getMarketTrend: (prices: number[]): 'bullish' | 'bearish' | 'sideways' => {
+    if (prices.length < 10) return 'sideways';
+    
+    const recent = prices.slice(-10);
+    const older = prices.slice(-20, -10);
+    
+    const recentAvg = recent.reduce((acc, price) => acc + price, 0) / recent.length;
+    const olderAvg = older.reduce((acc, price) => acc + price, 0) / older.length;
+    
+    const change = (recentAvg - olderAvg) / olderAvg;
+    
+    if (change > 0.01) return 'bullish';
+    if (change < -0.01) return 'bearish';
+    return 'sideways';
+  },
 };
 
 export default binanceFuturesAPI;
