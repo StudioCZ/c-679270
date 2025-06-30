@@ -9,11 +9,23 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
     proxy: {
-      '/binance-api': {
-        target: 'https://api.binance.com',
+      '/binance-futures-api': {
+        target: 'https://fapi.binance.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/binance-api/, ''),
+        rewrite: (path) => path.replace(/^\/binance-futures-api/, ''),
         secure: true,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+      },
+      '/binance-futures-testnet-api': {
+        target: 'https://testnet.binancefuture.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/binance-futures-testnet-api/, ''),
+        secure: true,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
       }
     }
   },

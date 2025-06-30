@@ -6,18 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import TradingChart from "@/components/trading/TradingChart";
-import SignalPanel from "@/components/trading/SignalPanel";
+import FuturesChart from "@/components/trading/FuturesChart";
+import FuturesSignalPanel from "@/components/trading/FuturesSignalPanel";
 import StrategyTester from "@/components/trading/StrategyTester";
 import SettingsPanel from "@/components/trading/SettingsPanel";
-import MarketOverview from "@/components/trading/MarketOverview";
-import { TrendingUp, TrendingDown, Activity, Settings, BarChart3, Bell } from "lucide-react";
+import FuturesMarketOverview from "@/components/trading/FuturesMarketOverview";
+import { TrendingUp, TrendingDown, Activity, Settings, BarChart3, Bell, Zap } from "lucide-react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 
 const TradingDashboard = () => {
   const [activeTimeframe, setActiveTimeframe] = useState("1h");
   const [alertsEnabled, setAlertsEnabled] = useState(true);
+  const [isTestnet, setIsTestnet] = useState(import.meta.env.VITE_BINANCE_TESTNET === 'true');
   const { theme, setTheme } = useTheme();
 
   const handleTimeframeChange = (timeframe: string) => {
@@ -36,23 +37,48 @@ const TradingDashboard = () => {
     toast.success(`Switched to ${newTheme} mode`);
   };
 
+  const handleTestnetToggle = (enabled: boolean) => {
+    setIsTestnet(enabled);
+    toast.info(enabled ? "Switched to Testnet mode" : "Switched to Production mode");
+    // Note: In a real implementation, this would require a page reload to change the API endpoints
+  };
+
   return (
     <div className="min-h-screen bg-background">
+      {/* Testnet Banner */}
+      {isTestnet && (
+        <div className="bg-yellow-500/20 border-b border-yellow-500/30 text-yellow-400 text-center py-2 text-sm font-medium">
+          ⚠️ TESTNET MODE - No real funds at risk
+        </div>
+      )}
+
       {/* Header */}
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
-                <Activity className="h-6 w-6 text-primary" />
-                <h1 className="text-xl font-bold">BTC Signal Pro</h1>
+                <Zap className="h-6 w-6 text-orange-500" />
+                <h1 className="text-xl font-bold">BTC Futures Signal Pro</h1>
               </div>
-              <Badge variant="outline" className="text-xs animate-pulse">
-                Live
+              <Badge variant="outline" className="text-xs animate-pulse bg-orange-500/20 text-orange-400 border-orange-500/30">
+                Perpetual
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                Live Futures Data
               </Badge>
             </div>
             
             <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <Label htmlFor="testnet" className="text-sm">Testnet</Label>
+                <Switch
+                  id="testnet"
+                  checked={isTestnet}
+                  onCheckedChange={handleTestnetToggle}
+                />
+              </div>
+
               <div className="flex items-center space-x-2">
                 <Bell className="h-4 w-4" />
                 <Switch
@@ -77,9 +103,9 @@ const TradingDashboard = () => {
 
       <div className="container mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Market Overview */}
+          {/* Futures Market Overview */}
           <div className="lg:col-span-4">
-            <MarketOverview />
+            <FuturesMarketOverview />
           </div>
 
           {/* Main Chart Area */}
@@ -88,8 +114,15 @@ const TradingDashboard = () => {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center space-x-2">
-                    <span>BTC/USDT</span>
-                    <Badge variant="secondary">Binance</Badge>
+                    <span>BTCUSDT Perpetual</span>
+                    <Badge variant="secondary" className="bg-orange-500/20 text-orange-400 border-orange-500/30">
+                      Binance Futures
+                    </Badge>
+                    {isTestnet && (
+                      <Badge variant="outline" className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
+                        Testnet
+                      </Badge>
+                    )}
                   </CardTitle>
                   
                   <div className="flex items-center space-x-2">
@@ -108,14 +141,14 @@ const TradingDashboard = () => {
                 </div>
               </CardHeader>
               <CardContent className="p-0 h-[520px]">
-                <TradingChart timeframe={activeTimeframe} />
+                <FuturesChart timeframe={activeTimeframe} />
               </CardContent>
             </Card>
           </div>
 
-          {/* Signal Panel */}
+          {/* Futures Signal Panel */}
           <div className="lg:col-span-1">
-            <SignalPanel />
+            <FuturesSignalPanel />
           </div>
 
           {/* Tabs for Additional Features */}
@@ -124,7 +157,7 @@ const TradingDashboard = () => {
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="signals" className="flex items-center space-x-2">
                   <TrendingUp className="h-4 w-4" />
-                  <span>Active Signals</span>
+                  <span>Active Futures Signals</span>
                 </TabsTrigger>
                 <TabsTrigger value="backtest" className="flex items-center space-x-2">
                   <BarChart3 className="h-4 w-4" />
@@ -138,14 +171,19 @@ const TradingDashboard = () => {
 
               <TabsContent value="signals" className="mt-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {/* Signal History Cards */}
+                  {/* Futures Signal History Cards */}
                   <Card className="hover:shadow-lg transition-shadow duration-200">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center justify-between">
-                        <span>Recent Signal</span>
-                        <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
-                          BUY
-                        </Badge>
+                        <span>Recent Futures Signal</span>
+                        <div className="flex items-center space-x-1">
+                          <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                            LONG
+                          </Badge>
+                          <Badge variant="outline" className="text-xs bg-orange-500/20 text-orange-400 border-orange-500/30">
+                            10x
+                          </Badge>
+                        </div>
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2">
@@ -159,15 +197,19 @@ const TradingDashboard = () => {
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Take Profit:</span>
-                        <span className="font-mono text-green-400">$44,100</span>
+                        <span className="font-mono text-green-400">$44,375</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Leverage:</span>
+                        <span className="font-semibold text-orange-400">10x</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Confidence:</span>
-                        <span className="font-semibold text-primary">85%</span>
+                        <span className="font-semibold text-primary">88%</span>
                       </div>
                       <Separator />
                       <div className="text-xs text-muted-foreground">
-                        SMC + Elliott Wave + RSI Divergence
+                        High OI + Funding Rate + Volume Confirmation
                       </div>
                     </CardContent>
                   </Card>
@@ -176,9 +218,14 @@ const TradingDashboard = () => {
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center justify-between">
                         <span>Previous Signal</span>
-                        <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
-                          SELL
-                        </Badge>
+                        <div className="flex items-center space-x-1">
+                          <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
+                            SHORT
+                          </Badge>
+                          <Badge variant="outline" className="text-xs bg-orange-500/20 text-orange-400 border-orange-500/30">
+                            8x
+                          </Badge>
+                        </div>
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2">
@@ -192,39 +239,47 @@ const TradingDashboard = () => {
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Take Profit:</span>
-                        <span className="font-mono text-green-400">$43,200</span>
+                        <span className="font-mono text-green-400">$42,800</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Leverage:</span>
+                        <span className="font-semibold text-orange-400">8x</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Confidence:</span>
-                        <span className="font-semibold text-primary">78%</span>
+                        <span className="font-semibold text-primary">82%</span>
                       </div>
                       <Separator />
                       <div className="text-xs text-muted-foreground">
-                        Break of Structure + MACD Cross
+                        Extreme Funding + Resistance Break
                       </div>
                     </CardContent>
                   </Card>
 
                   <Card className="hover:shadow-lg transition-shadow duration-200">
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-sm">Signal Statistics</CardTitle>
+                      <CardTitle className="text-sm">Futures Statistics</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Win Rate:</span>
-                        <span className="font-semibold text-green-400">72%</span>
+                        <span className="font-semibold text-green-400">78%</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Avg R:R:</span>
-                        <span className="font-semibold">1:2.3</span>
+                        <span className="font-semibold">1:2.8</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Avg Leverage:</span>
+                        <span className="font-semibold text-orange-400">7.2x</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Total Signals:</span>
-                        <span className="font-semibold">156</span>
+                        <span className="font-semibold">203</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">This Week:</span>
-                        <span className="font-semibold text-primary">12</span>
+                        <span className="font-semibold text-primary">18</span>
                       </div>
                     </CardContent>
                   </Card>
