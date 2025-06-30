@@ -24,6 +24,8 @@ const isDemoMode = (): boolean => {
          !apiSecret || 
          apiKey === 'your_binance_api_key_here' || 
          apiSecret === 'your_binance_api_secret_here' ||
+         apiKey === 'your_testnet_api_key_here' ||
+         apiSecret === 'your_testnet_secret_key_here' ||
          apiKey === 'demo_mode' ||
          apiSecret === 'demo_mode';
 };
@@ -42,6 +44,8 @@ const validateCredentials = (): { isValid: boolean; message?: string } => {
   
   if (apiKey === 'your_binance_api_key_here' || 
       apiSecret === 'your_binance_api_secret_here' ||
+      apiKey === 'your_testnet_api_key_here' ||
+      apiSecret === 'your_testnet_secret_key_here' ||
       apiKey === 'demo_mode' ||
       apiSecret === 'demo_mode') {
     return {
@@ -53,7 +57,7 @@ const validateCredentials = (): { isValid: boolean; message?: string } => {
   return { isValid: true };
 };
 
-// Mock data simulator for consistent demo data
+// Mock data simulator for consistent demo data (slower updates)
 class MockDataSimulator {
   private static instance: MockDataSimulator;
   private basePrice: number = 43250.00;
@@ -65,7 +69,8 @@ class MockDataSimulator {
   private count: number = 125678;
   private fundingRate: number = 0.0001;
   private trend: number = 1;
-  private volatility: number = 0.0002;
+  private volatility: number = 0.00005; // Much lower volatility
+  private lastUpdate: number = Date.now();
 
   private constructor() {
     // Singleton pattern to ensure consistent data across all components
@@ -79,36 +84,57 @@ class MockDataSimulator {
   }
 
   private resetTrend() {
-    if (Math.random() < 0.02) {
+    // Change trend very rarely (every 5-10 minutes on average)
+    if (Math.random() < 0.002) {
       this.trend *= -1;
-      this.volatility = 0.0001 + Math.random() * 0.0003;
+      this.volatility = 0.00002 + Math.random() * 0.00008; // 0.002% to 0.01% volatility
     }
   }
 
   getNextPrice(): number {
+    const now = Date.now();
+    const timeDiff = now - this.lastUpdate;
+    
+    // Only update if enough time has passed (minimum 1 minute)
+    if (timeDiff < 60000) {
+      return this.currentPrice;
+    }
+    
+    this.lastUpdate = now;
     this.resetTrend();
     
     const randomFactor = (Math.random() - 0.5) * 2;
-    const trendFactor = this.trend * 0.3;
+    const trendFactor = this.trend * 0.1;
     const priceChange = this.currentPrice * this.volatility * (randomFactor + trendFactor);
     
     this.currentPrice += priceChange;
     this.currentPrice = Math.max(this.low24h * 0.999, Math.min(this.high24h * 1.001, this.currentPrice));
     
-    if (this.currentPrice > this.high24h) {
-      this.high24h = this.currentPrice;
-    }
-    if (this.currentPrice < this.low24h) {
-      this.low24h = this.currentPrice;
+    // Very rarely update bounds
+    if (Math.random() < 0.005) {
+      if (this.currentPrice > this.high24h) {
+        this.high24h = this.currentPrice;
+      }
+      if (this.currentPrice < this.low24h) {
+        this.low24h = this.currentPrice;
+      }
     }
     
     return this.currentPrice;
   }
 
   getCurrentData() {
-    const price = this.currentPrice;
+    const price = this.getNextPrice();
     const priceChange = price - this.openPrice;
     const priceChangePercent = (priceChange / this.openPrice) * 100;
+    
+    // Very slowly increment counters
+    this.volume += Math.random() * 0.1;
+    this.count += Math.floor(Math.random() * 1);
+    
+    // Very slightly vary funding rate
+    this.fundingRate += (Math.random() - 0.5) * 0.000001;
+    this.fundingRate = Math.max(-0.001, Math.min(0.001, this.fundingRate));
     
     return {
       price,
@@ -160,21 +186,21 @@ const createMockData = (endpoint: string): any => {
     
     for (let i = 0; i < 100; i++) {
       const time = now - (i * 3600000);
-      const priceVariation = (Math.random() - 0.5) * 200;
+      const priceVariation = (Math.random() - 0.5) * 50; // Smaller variations
       const candlePrice = basePrice + priceVariation;
       
       mockKlines.unshift([
         time,
         candlePrice.toFixed(2),
-        (candlePrice + Math.random() * 100).toFixed(2),
-        (candlePrice - Math.random() * 100).toFixed(2),
-        (candlePrice + (Math.random() - 0.5) * 50).toFixed(2),
-        (Math.random() * 100).toFixed(3),
-        time + 3599999,
-        (Math.random() * 1000000).toFixed(2),
-        Math.floor(Math.random() * 1000),
+        (candlePrice + Math.random() * 25).toFixed(2),
+        (candlePrice - Math.random() * 25).toFixed(2),
+        (candlePrice + (Math.random() - 0.5) * 10).toFixed(2),
         (Math.random() * 50).toFixed(3),
+        time + 3599999,
         (Math.random() * 500000).toFixed(2),
+        Math.floor(Math.random() * 500),
+        (Math.random() * 25).toFixed(3),
+        (Math.random() * 250000).toFixed(2),
         '0'
       ]);
     }
@@ -210,11 +236,11 @@ const createMockData = (endpoint: string): any => {
     for (let i = 0; i < 20; i++) {
       bids.push([
         (basePrice - i * 0.01).toFixed(2),
-        (Math.random() * 10).toFixed(3)
+        (Math.random() * 5).toFixed(3)
       ]);
       asks.push([
         (basePrice + i * 0.01).toFixed(2),
-        (Math.random() * 10).toFixed(3)
+        (Math.random() * 5).toFixed(3)
       ]);
     }
     
@@ -251,7 +277,11 @@ const apiRequest = async (
 ): Promise<any> => {
   // Check if we're in demo mode
   if (isDemoMode()) {
-    console.log(`🎭 Demo mode: Returning consistent mock data for ${endpoint}`);
+    console.log(`🎭 Demo mode: Returning slower mock data for ${endpoint}`);
+    console.log('📝 To use real Binance data:');
+    console.log('1. Get FREE testnet API keys from: https://testnet.binancefuture.com/');
+    console.log('2. Update your .env file with real API credentials');
+    console.log('3. Restart the development server');
     return createMockData(endpoint);
   }
 

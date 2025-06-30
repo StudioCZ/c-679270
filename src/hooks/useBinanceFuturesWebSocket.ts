@@ -38,6 +38,8 @@ const isDemoMode = (): boolean => {
          !apiSecret || 
          apiKey === 'your_binance_api_key_here' || 
          apiSecret === 'your_binance_api_secret_here' ||
+         apiKey === 'your_testnet_api_key_here' ||
+         apiSecret === 'your_testnet_secret_key_here' ||
          apiKey === 'demo_mode' ||
          apiSecret === 'demo_mode';
 };
@@ -56,6 +58,8 @@ const validateWebSocketSetup = (): { isValid: boolean; message?: string } => {
   
   if (apiKey === 'your_binance_api_key_here' || 
       apiSecret === 'your_binance_api_secret_here' ||
+      apiKey === 'your_testnet_api_key_here' ||
+      apiSecret === 'your_testnet_secret_key_here' ||
       apiKey === 'demo_mode' ||
       apiSecret === 'demo_mode') {
     return {
@@ -67,8 +71,9 @@ const validateWebSocketSetup = (): { isValid: boolean; message?: string } => {
   return { isValid: true };
 };
 
-// Mock data state for realistic price simulation
+// Mock data state for realistic price simulation (slower updates)
 class MockDataSimulator {
+  private static instance: MockDataSimulator;
   private basePrice: number = 43250.00;
   private currentPrice: number = 43250.00;
   private openPrice: number = 43100.00;
@@ -78,40 +83,58 @@ class MockDataSimulator {
   private count: number = 125678;
   private fundingRate: number = 0.0001;
   private trend: number = 1; // 1 for up, -1 for down
-  private volatility: number = 0.0002; // 0.02% volatility per update
+  private volatility: number = 0.0001; // Reduced volatility for slower changes
+  private lastUpdate: number = Date.now();
 
-  constructor() {
-    // Initialize with realistic starting values
-    this.resetTrend();
+  private constructor() {
+    // Singleton pattern to ensure consistent data across all components
+  }
+
+  public static getInstance(): MockDataSimulator {
+    if (!MockDataSimulator.instance) {
+      MockDataSimulator.instance = new MockDataSimulator();
+    }
+    return MockDataSimulator.instance;
   }
 
   private resetTrend() {
-    // Change trend occasionally (every 30-60 updates on average)
-    if (Math.random() < 0.02) {
+    // Change trend less frequently (every 2-3 minutes on average)
+    if (Math.random() < 0.005) {
       this.trend *= -1;
-      this.volatility = 0.0001 + Math.random() * 0.0003; // 0.01% to 0.04%
+      this.volatility = 0.00005 + Math.random() * 0.00015; // 0.005% to 0.02% volatility
     }
   }
 
   getNextPrice(): number {
+    const now = Date.now();
+    const timeDiff = now - this.lastUpdate;
+    
+    // Only update if enough time has passed (minimum 30 seconds)
+    if (timeDiff < 30000) {
+      return this.currentPrice;
+    }
+    
+    this.lastUpdate = now;
     this.resetTrend();
     
-    // Generate small realistic price movement
+    // Generate very small realistic price movement
     const randomFactor = (Math.random() - 0.5) * 2; // -1 to 1
-    const trendFactor = this.trend * 0.3; // Slight trend bias
+    const trendFactor = this.trend * 0.2; // Reduced trend bias
     const priceChange = this.currentPrice * this.volatility * (randomFactor + trendFactor);
     
     this.currentPrice += priceChange;
     
     // Keep price within reasonable bounds
-    this.currentPrice = Math.max(this.low24h * 0.999, Math.min(this.high24h * 1.001, this.currentPrice));
+    this.currentPrice = Math.max(this.low24h * 0.9995, Math.min(this.high24h * 1.0005, this.currentPrice));
     
-    // Occasionally update 24h high/low
-    if (this.currentPrice > this.high24h) {
-      this.high24h = this.currentPrice;
-    }
-    if (this.currentPrice < this.low24h) {
-      this.low24h = this.currentPrice;
+    // Very rarely update 24h high/low
+    if (Math.random() < 0.01) {
+      if (this.currentPrice > this.high24h) {
+        this.high24h = this.currentPrice;
+      }
+      if (this.currentPrice < this.low24h) {
+        this.low24h = this.currentPrice;
+      }
     }
     
     return this.currentPrice;
@@ -122,12 +145,12 @@ class MockDataSimulator {
     const priceChange = price - this.openPrice;
     const priceChangePercent = (priceChange / this.openPrice) * 100;
     
-    // Slowly increment volume and count
-    this.volume += Math.random() * 2;
-    this.count += Math.floor(Math.random() * 5);
+    // Very slowly increment volume and count
+    this.volume += Math.random() * 0.5;
+    this.count += Math.floor(Math.random() * 2);
     
-    // Slightly vary funding rate
-    this.fundingRate += (Math.random() - 0.5) * 0.00001;
+    // Very slightly vary funding rate
+    this.fundingRate += (Math.random() - 0.5) * 0.000005;
     this.fundingRate = Math.max(-0.001, Math.min(0.001, this.fundingRate));
 
     return {
@@ -140,7 +163,7 @@ class MockDataSimulator {
       low24h: this.low24h,
       openPrice: this.openPrice,
       count: this.count,
-      markPrice: price + (Math.random() - 0.5) * 2, // Mark price close to spot price
+      markPrice: price + (Math.random() - 0.5) * 1, // Mark price very close to spot price
       fundingRate: this.fundingRate,
       nextFundingTime: Date.now() + 3600000,
     };
@@ -148,9 +171,9 @@ class MockDataSimulator {
 
   getKlineData(): KlineData {
     const price = this.currentPrice;
-    const open = price - (Math.random() - 0.5) * 20;
-    const high = Math.max(open, price) + Math.random() * 10;
-    const low = Math.min(open, price) - Math.random() * 10;
+    const open = price - (Math.random() - 0.5) * 10;
+    const high = Math.max(open, price) + Math.random() * 5;
+    const low = Math.min(open, price) - Math.random() * 5;
 
     return {
       symbol: 'BTCUSDT',
@@ -160,8 +183,8 @@ class MockDataSimulator {
       high: high,
       low: low,
       close: price,
-      volume: Math.random() * 50 + 25,
-      trades: Math.floor(Math.random() * 500) + 200,
+      volume: Math.random() * 25 + 15,
+      trades: Math.floor(Math.random() * 250) + 150,
       interval: '1h',
     };
   }
@@ -176,35 +199,35 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
   const mockDataIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const mockSimulatorRef = useRef<MockDataSimulator | null>(null);
 
   useEffect(() => {
     // Check if we're in demo mode
     if (isDemoMode()) {
-      console.log('🎭 Demo mode: Using realistic mock WebSocket data simulation');
-      setIsConnected(true);
-      setConnectionError(null);
+      console.log('🎭 Demo mode: Using slower mock WebSocket data simulation');
+      console.log('📝 To use real Binance data:');
+      console.log('1. Get FREE testnet API keys from: https://testnet.binancefuture.com/');
+      console.log('2. Update your .env file with real API credentials');
+      console.log('3. Restart the development server');
       
-      // Initialize mock data simulator
-      if (!mockSimulatorRef.current) {
-        mockSimulatorRef.current = new MockDataSimulator();
-      }
+      setIsConnected(true);
+      setConnectionError('Demo Mode - Using mock data. Update .env file with real API keys to connect to Binance.');
+      
+      // Get singleton instance for consistent data
+      const mockSimulator = MockDataSimulator.getInstance();
       
       // Generate initial mock data
-      const initialTickerData = mockSimulatorRef.current.getTickerData();
-      const initialKlineData = mockSimulatorRef.current.getKlineData();
+      const initialTickerData = mockSimulator.getTickerData();
+      const initialKlineData = mockSimulator.getKlineData();
       setTickerData(initialTickerData);
       setKlineData(initialKlineData);
       
-      // Update mock data with realistic intervals (every 5 seconds for smoother updates)
+      // Update mock data much less frequently (every 30 seconds)
       mockDataIntervalRef.current = setInterval(() => {
-        if (mockSimulatorRef.current) {
-          const newTickerData = mockSimulatorRef.current.getTickerData();
-          const newKlineData = mockSimulatorRef.current.getKlineData();
-          setTickerData(newTickerData);
-          setKlineData(newKlineData);
-        }
-      }, 5000); // Update every 5 seconds instead of 2 seconds
+        const newTickerData = mockSimulator.getTickerData();
+        const newKlineData = mockSimulator.getKlineData();
+        setTickerData(newTickerData);
+        setKlineData(newKlineData);
+      }, 30000); // Update every 30 seconds instead of 5 seconds
       
       return () => {
         if (mockDataIntervalRef.current) {
