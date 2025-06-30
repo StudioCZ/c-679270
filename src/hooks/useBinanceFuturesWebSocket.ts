@@ -29,6 +29,30 @@ interface KlineData {
   interval: string;
 }
 
+// Validate WebSocket connection prerequisites
+const validateWebSocketSetup = (): boolean => {
+  const apiKey = import.meta.env.VITE_BINANCE_API_KEY;
+  const apiSecret = import.meta.env.VITE_BINANCE_API_SECRET;
+  
+  if (!apiKey || !apiSecret) {
+    console.error('❌ Missing Binance API credentials for WebSocket connection!');
+    console.error('Please check your .env file and ensure you have:');
+    console.error('- VITE_BINANCE_API_KEY=your_api_key');
+    console.error('- VITE_BINANCE_API_SECRET=your_api_secret');
+    return false;
+  }
+  
+  if (apiKey === 'your_binance_api_key_here' || apiSecret === 'your_binance_api_secret_here') {
+    console.error('❌ Please replace placeholder API credentials with your actual Binance API keys!');
+    console.error('Get your API keys from:');
+    console.error('- Testnet: https://testnet.binancefuture.com/');
+    console.error('- Production: https://www.binance.com/en/my/settings/api-management');
+    return false;
+  }
+  
+  return true;
+};
+
 export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = []) => {
   const [tickerData, setTickerData] = useState<FuturesTickerData | null>(null);
   const [klineData, setKlineData] = useState<KlineData | null>(null);
@@ -41,6 +65,12 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
   useEffect(() => {
     const connectWebSocket = () => {
       try {
+        // Validate setup before attempting connection
+        if (!validateWebSocketSetup()) {
+          setConnectionError('Invalid or missing API credentials. Please check your .env file.');
+          return;
+        }
+
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);
         }
@@ -55,7 +85,8 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
         const streamList = streams.length > 0 ? streams : defaultStreams;
         const wsUrl = createFuturesWebSocketUrl(streamList);
         
-        console.log('🔄 Connecting to Binance Futures WebSocket:', wsUrl);
+        const environment = import.meta.env.VITE_BINANCE_TESTNET === 'true' ? 'TESTNET' : 'PRODUCTION';
+        console.log(`🔄 Connecting to Binance Futures WebSocket [${environment}]:`, wsUrl);
         
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
@@ -64,7 +95,7 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
           setIsConnected(true);
           setConnectionError(null);
           reconnectAttempts.current = 0;
-          console.log('✅ Binance Futures WebSocket connected successfully');
+          console.log(`✅ Binance Futures WebSocket connected successfully [${environment}]`);
         };
 
         ws.onmessage = (event) => {
@@ -143,7 +174,16 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
 
         ws.onclose = (event) => {
           setIsConnected(false);
-          console.log('🔌 Futures WebSocket disconnected:', event.code, event.reason);
+          console.log(`🔌 Futures WebSocket disconnected [${environment}]:`, event.code, event.reason);
+          
+          // Provide specific error messages for common close codes
+          if (event.code === 1006) {
+            console.error('❌ WebSocket connection closed abnormally. This often indicates:');
+            console.error('1. Network connectivity issues');
+            console.error('2. Firewall blocking WebSocket connections');
+            console.error('3. API access restrictions');
+            console.error('4. Invalid API credentials');
+          }
           
           if (event.code !== 1000 && reconnectAttempts.current < 10) {
             const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
@@ -151,19 +191,28 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
             reconnectAttempts.current++;
             reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
           } else if (reconnectAttempts.current >= 10) {
-            setConnectionError('Max reconnection attempts reached');
+            setConnectionError('Max reconnection attempts reached. Please check your API credentials and network connection.');
           }
         };
 
         ws.onerror = (error) => {
-          console.error('❌ Futures WebSocket error:', error);
+          console.error(`❌ Futures WebSocket error [${environment}]:`, error);
           setIsConnected(false);
-          setConnectionError('Futures WebSocket connection failed');
+          
+          // Provide helpful error message
+          const errorMessage = 'WebSocket connection failed. This usually indicates:\n' +
+            '1. Invalid API credentials\n' +
+            '2. Network or firewall issues\n' +
+            '3. API access restrictions\n' +
+            '4. Server-side issues\n\n' +
+            'Please check your .env file and ensure your API key has "Enable Futures" permission.';
+          
+          setConnectionError(errorMessage);
         };
       } catch (error) {
         console.error('❌ Error creating Futures WebSocket:', error);
         setIsConnected(false);
-        setConnectionError('Failed to create Futures WebSocket connection');
+        setConnectionError('Failed to create Futures WebSocket connection. Please check your API credentials.');
         
         if (reconnectAttempts.current < 10) {
           const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);

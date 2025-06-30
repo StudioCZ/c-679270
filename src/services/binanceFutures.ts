@@ -15,6 +15,31 @@ const TESTNET_WS_URL = 'wss://fstream.binancefuture.com';
 const isTestnet = import.meta.env.VITE_BINANCE_TESTNET === 'true';
 export const WS_BASE_URL = isTestnet ? TESTNET_WS_URL : PRODUCTION_WS_URL;
 
+// Validate API credentials
+const validateCredentials = (): boolean => {
+  const apiKey = import.meta.env.VITE_BINANCE_API_KEY;
+  const apiSecret = import.meta.env.VITE_BINANCE_API_SECRET;
+  
+  if (!apiKey || !apiSecret) {
+    console.error('❌ Missing Binance API credentials!');
+    console.error('Please check your .env file and ensure you have:');
+    console.error('- VITE_BINANCE_API_KEY=your_api_key');
+    console.error('- VITE_BINANCE_API_SECRET=your_api_secret');
+    console.error('- VITE_BINANCE_TESTNET=true (for testnet) or false (for production)');
+    return false;
+  }
+  
+  if (apiKey === 'your_binance_api_key_here' || apiSecret === 'your_binance_api_secret_here') {
+    console.error('❌ Please replace placeholder API credentials with your actual Binance API keys!');
+    console.error('Get your API keys from:');
+    console.error('- Testnet: https://testnet.binancefuture.com/');
+    console.error('- Production: https://www.binance.com/en/my/settings/api-management');
+    return false;
+  }
+  
+  return true;
+};
+
 // Create parameters with timestamp (signature will be added by proxy)
 const createSignedParams = (params: Record<string, any> = {}): string => {
   const timestamp = Date.now();
@@ -33,6 +58,11 @@ const apiRequest = async (
   params: Record<string, any> = {},
   signed: boolean = false
 ): Promise<any> => {
+  // Validate credentials before making requests
+  if (!validateCredentials()) {
+    throw new Error('Invalid or missing API credentials. Please check your .env file.');
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -68,7 +98,8 @@ const apiRequest = async (
     url += `?${queryString}`;
   }
 
-  console.log(`🔄 Binance Futures API ${method} ${endpoint}`, { params, signed });
+  const environment = isTestnet ? 'TESTNET' : 'PRODUCTION';
+  console.log(`🔄 Binance Futures API ${method} ${endpoint} [${environment}]`, { params, signed });
 
   try {
     const response = await fetch(url, {
@@ -79,14 +110,37 @@ const apiRequest = async (
 
     if (!response.ok) {
       const errorText = await response.text();
+      
+      // Provide specific error messages for common issues
+      if (response.status === 403) {
+        console.error('❌ 403 Forbidden - API Access Denied');
+        console.error('This usually means:');
+        console.error('1. Invalid API key or secret');
+        console.error('2. API key does not have "Enable Futures" permission');
+        console.error('3. IP address is not whitelisted (if IP restrictions are enabled)');
+        console.error('4. Account is restricted or suspended');
+        console.error('');
+        console.error('Solutions:');
+        console.error('- Verify your API credentials in the .env file');
+        console.error('- Check that "Enable Futures" is enabled for your API key');
+        console.error('- Try using testnet: VITE_BINANCE_TESTNET=true');
+        console.error('- Check your Binance account status');
+        
+        throw new Error(`API Access Denied (403). Please check your API credentials and permissions. Using ${environment} environment.`);
+      }
+      
+      if (response.status === 401) {
+        throw new Error(`Unauthorized (401). Please check your API key and signature. Using ${environment} environment.`);
+      }
+      
       throw new Error(`Binance Futures API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json();
-    console.log(`✅ Binance Futures API response:`, data);
+    console.log(`✅ Binance Futures API response [${environment}]:`, data);
     return data;
   } catch (error) {
-    console.error(`❌ Binance Futures API error:`, error);
+    console.error(`❌ Binance Futures API error [${environment}]:`, error);
     throw error;
   }
 };

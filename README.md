@@ -2,6 +2,10 @@
 
 A professional web application for generating real-time BTC/USDT perpetual futures trading signals using Binance USDT-Margined Futures API.
 
+## 🚨 IMPORTANT: API Setup Required
+
+**This application requires valid Binance API credentials to function. Follow the setup instructions below before running the application.**
+
 ## Features
 
 ### 🚀 Real-Time Futures Data
@@ -33,6 +37,81 @@ A professional web application for generating real-time BTC/USDT perpetual futur
 - Open interest analysis
 - Position size calculations
 - Risk management with liquidation price awareness
+
+## 🔧 Setup Instructions (REQUIRED)
+
+### Step 1: Get Binance API Credentials
+
+**For Development/Testing (Recommended):**
+1. Visit [Binance Futures Testnet](https://testnet.binancefuture.com/)
+2. Create a testnet account (free, no real money required)
+3. Generate API keys in the testnet dashboard
+4. Copy your testnet API Key and Secret Key
+
+**For Production Trading:**
+1. Create a Binance account at [binance.com](https://binance.com)
+2. Complete account verification
+3. Go to [API Management](https://www.binance.com/en/my/settings/api-management)
+4. Create a new API key with the following settings:
+   - ✅ **Enable Futures** (REQUIRED)
+   - ✅ Enable Reading (for market data)
+   - ✅ Enable Spot & Margin Trading (if needed)
+   - ❌ Disable Withdrawals (for security)
+5. Set IP restrictions for additional security (optional but recommended)
+
+### Step 2: Configure Environment Variables
+
+1. Open the `.env` file in the project root
+2. Replace the placeholder values with your actual API credentials:
+
+```env
+# For Testnet (Recommended for development)
+VITE_BINANCE_API_KEY=your_testnet_api_key_here
+VITE_BINANCE_API_SECRET=your_testnet_secret_key_here
+VITE_BINANCE_TESTNET=true
+
+# For Production (Real trading)
+# VITE_BINANCE_API_KEY=your_production_api_key_here
+# VITE_BINANCE_API_SECRET=your_production_secret_key_here
+# VITE_BINANCE_TESTNET=false
+```
+
+### Step 3: Install and Run
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+## 🔍 Troubleshooting Common Issues
+
+### 403 Forbidden Error
+If you see "403 Forbidden" errors:
+
+1. **Check API Key Validity**: Ensure your API key and secret are correct
+2. **Enable Futures Permission**: Your API key MUST have "Enable Futures" permission
+3. **Check IP Restrictions**: If you set IP restrictions, ensure your current IP is whitelisted
+4. **Verify Account Status**: Ensure your Binance account is in good standing
+5. **Use Testnet**: Switch to testnet for development: `VITE_BINANCE_TESTNET=true`
+
+### WebSocket Connection Errors
+If WebSocket connections fail:
+
+1. **Check Network**: Ensure you have a stable internet connection
+2. **Firewall Settings**: Check if your firewall is blocking WebSocket connections
+3. **API Credentials**: WebSocket issues often relate to the same problems as REST API errors
+4. **Try Testnet**: Switch to testnet to isolate the issue
+
+### Environment Variable Issues
+If environment variables aren't loading:
+
+1. **File Location**: Ensure `.env` file is in the project root directory
+2. **File Name**: Must be exactly `.env` (not `.env.local` or `.env.example`)
+3. **Restart Server**: Restart the development server after changing `.env`
+4. **No Quotes**: Don't wrap values in quotes in the `.env` file
 
 ## API Integration
 
@@ -68,52 +147,23 @@ A professional web application for generating real-time BTC/USDT perpetual futur
 - `btcusdt@markPrice@1s` - Mark price stream
 - `btcusdt@depth@100ms` - Order book updates
 
-## Setup Instructions
+## 🔒 Security Best Practices
 
-### 1. Environment Configuration
-
-Create a `.env` file in the root directory:
-
-```env
-# Binance Futures API Configuration
-VITE_BINANCE_API_KEY=your_binance_api_key_here
-VITE_BINANCE_API_SECRET=your_binance_api_secret_here
-
-# Environment Configuration (set to true for testnet)
-VITE_BINANCE_TESTNET=false
-```
-
-### 2. API Key Setup
-
-1. Create a Binance account at [binance.com](https://binance.com)
-2. Go to API Management in your account settings
-3. Create a new API key with futures trading permissions
-4. **Important**: Enable "Enable Futures" permission
-5. Add your API key and secret to the `.env` file
-
-**For Testnet (Recommended for Development):**
-1. Visit [testnet.binancefuture.com](https://testnet.binancefuture.com)
-2. Create a testnet account
-3. Generate testnet API keys
-4. Set `VITE_BINANCE_TESTNET=true` in your `.env` file
-
-### 3. Installation
-
-```bash
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-```
-
-### 4. Security Considerations
-
+### API Key Security
 - **Never commit API keys to version control**
-- Use testnet for development and testing
-- Implement proper IP restrictions on your API keys
-- Use read-only permissions for market data features
-- Only enable trading permissions when necessary
+- **Use testnet for development and testing**
+- **Set IP restrictions on production API keys**
+- **Use minimum required permissions**
+- **Regularly rotate API keys**
+- **Monitor API key usage**
+
+### Trading Safety
+- **Start with testnet trading**
+- **Use small position sizes initially**
+- **Set stop-loss orders**
+- **Never risk more than you can afford to lose**
+- **Understand leverage risks**
+- **Monitor funding rates**
 
 ## Risk Management Features
 
