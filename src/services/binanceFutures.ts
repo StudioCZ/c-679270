@@ -15,29 +15,143 @@ const TESTNET_WS_URL = 'wss://fstream.binancefuture.com';
 const isTestnet = import.meta.env.VITE_BINANCE_TESTNET === 'true';
 export const WS_BASE_URL = isTestnet ? TESTNET_WS_URL : PRODUCTION_WS_URL;
 
+// Check if we're in demo mode
+const isDemoMode = (): boolean => {
+  const apiKey = import.meta.env.VITE_BINANCE_API_KEY;
+  const apiSecret = import.meta.env.VITE_BINANCE_API_SECRET;
+  
+  return !apiKey || 
+         !apiSecret || 
+         apiKey === 'your_binance_api_key_here' || 
+         apiSecret === 'your_binance_api_secret_here' ||
+         apiKey === 'demo_mode' ||
+         apiSecret === 'demo_mode';
+};
+
 // Validate API credentials
-const validateCredentials = (): boolean => {
+const validateCredentials = (): { isValid: boolean; message?: string } => {
   const apiKey = import.meta.env.VITE_BINANCE_API_KEY;
   const apiSecret = import.meta.env.VITE_BINANCE_API_SECRET;
   
   if (!apiKey || !apiSecret) {
-    console.error('❌ Missing Binance API credentials!');
-    console.error('Please check your .env file and ensure you have:');
-    console.error('- VITE_BINANCE_API_KEY=your_api_key');
-    console.error('- VITE_BINANCE_API_SECRET=your_api_secret');
-    console.error('- VITE_BINANCE_TESTNET=true (for testnet) or false (for production)');
-    return false;
+    return {
+      isValid: false,
+      message: 'Missing Binance API credentials. Please check your .env file and ensure you have VITE_BINANCE_API_KEY and VITE_BINANCE_API_SECRET set.'
+    };
   }
   
-  if (apiKey === 'your_binance_api_key_here' || apiSecret === 'your_binance_api_secret_here') {
-    console.error('❌ Please replace placeholder API credentials with your actual Binance API keys!');
-    console.error('Get your API keys from:');
-    console.error('- Testnet: https://testnet.binancefuture.com/');
-    console.error('- Production: https://www.binance.com/en/my/settings/api-management');
-    return false;
+  if (apiKey === 'your_binance_api_key_here' || 
+      apiSecret === 'your_binance_api_secret_here' ||
+      apiKey === 'demo_mode' ||
+      apiSecret === 'demo_mode') {
+    return {
+      isValid: false,
+      message: 'Please replace placeholder API credentials with your actual Binance API keys. Get your API keys from: Testnet: https://testnet.binancefuture.com/ or Production: https://www.binance.com/en/my/settings/api-management'
+    };
   }
   
-  return true;
+  return { isValid: true };
+};
+
+// Create mock data for demo mode
+const createMockData = (endpoint: string): any => {
+  if (endpoint.includes('/fapi/v1/ticker/24hr')) {
+    return {
+      symbol: 'BTCUSDT',
+      priceChange: '1234.56',
+      priceChangePercent: '2.34',
+      weightedAvgPrice: '45678.90',
+      prevClosePrice: '44444.34',
+      lastPrice: '45678.90',
+      lastQty: '0.001',
+      bidPrice: '45678.89',
+      askPrice: '45678.91',
+      openPrice: '44444.34',
+      highPrice: '46000.00',
+      lowPrice: '44000.00',
+      volume: '12345.678',
+      quoteVolume: '567890123.45',
+      openTime: Date.now() - 86400000,
+      closeTime: Date.now(),
+      firstId: 123456789,
+      lastId: 123456790,
+      count: 1000
+    };
+  }
+  
+  if (endpoint.includes('/fapi/v1/klines')) {
+    const now = Date.now();
+    const mockKlines = [];
+    for (let i = 0; i < 100; i++) {
+      const time = now - (i * 3600000); // 1 hour intervals
+      const basePrice = 45000 + Math.random() * 2000;
+      mockKlines.unshift([
+        time,
+        basePrice.toFixed(2),
+        (basePrice + Math.random() * 500).toFixed(2),
+        (basePrice - Math.random() * 500).toFixed(2),
+        (basePrice + (Math.random() - 0.5) * 1000).toFixed(2),
+        (Math.random() * 100).toFixed(3),
+        time + 3599999,
+        (Math.random() * 1000000).toFixed(2),
+        Math.floor(Math.random() * 1000),
+        (Math.random() * 50).toFixed(3),
+        (Math.random() * 500000).toFixed(2),
+        '0'
+      ]);
+    }
+    return mockKlines;
+  }
+  
+  if (endpoint.includes('/fapi/v1/premiumIndex')) {
+    return {
+      symbol: 'BTCUSDT',
+      markPrice: '45678.90',
+      indexPrice: '45678.85',
+      estimatedSettlePrice: '45678.88',
+      lastFundingRate: '0.00010000',
+      nextFundingTime: Date.now() + 3600000,
+      interestRate: '0.00010000',
+      time: Date.now()
+    };
+  }
+  
+  if (endpoint.includes('/fapi/v1/openInterest')) {
+    return {
+      openInterest: '123456.789',
+      symbol: 'BTCUSDT',
+      time: Date.now()
+    };
+  }
+  
+  if (endpoint.includes('/fapi/v1/depth')) {
+    const basePrice = 45678.90;
+    const bids = [];
+    const asks = [];
+    
+    for (let i = 0; i < 20; i++) {
+      bids.push([
+        (basePrice - i * 0.01).toFixed(2),
+        (Math.random() * 10).toFixed(3)
+      ]);
+      asks.push([
+        (basePrice + i * 0.01).toFixed(2),
+        (Math.random() * 10).toFixed(3)
+      ]);
+    }
+    
+    return {
+      lastUpdateId: Date.now(),
+      bids,
+      asks
+    };
+  }
+  
+  // Default mock response
+  return {
+    message: 'Demo mode - mock data',
+    timestamp: Date.now()
+  };
 };
 
 // Create parameters with timestamp (signature will be added by proxy)
@@ -58,9 +172,16 @@ const apiRequest = async (
   params: Record<string, any> = {},
   signed: boolean = false
 ): Promise<any> => {
-  // Validate credentials before making requests
-  if (!validateCredentials()) {
-    throw new Error('Invalid or missing API credentials. Please check your .env file.');
+  // Check if we're in demo mode
+  if (isDemoMode()) {
+    console.log(`🎭 Demo mode: Returning mock data for ${endpoint}`);
+    return createMockData(endpoint);
+  }
+
+  // Validate credentials for real API calls
+  const validation = validateCredentials();
+  if (!validation.isValid) {
+    throw new Error(validation.message);
   }
 
   const headers: Record<string, string> = {

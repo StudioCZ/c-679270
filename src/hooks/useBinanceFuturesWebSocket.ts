@@ -29,28 +29,77 @@ interface KlineData {
   interval: string;
 }
 
+// Check if we're in demo mode
+const isDemoMode = (): boolean => {
+  const apiKey = import.meta.env.VITE_BINANCE_API_KEY;
+  const apiSecret = import.meta.env.VITE_BINANCE_API_SECRET;
+  
+  return !apiKey || 
+         !apiSecret || 
+         apiKey === 'your_binance_api_key_here' || 
+         apiSecret === 'your_binance_api_secret_here' ||
+         apiKey === 'demo_mode' ||
+         apiSecret === 'demo_mode';
+};
+
 // Validate WebSocket connection prerequisites
-const validateWebSocketSetup = (): boolean => {
+const validateWebSocketSetup = (): { isValid: boolean; message?: string } => {
   const apiKey = import.meta.env.VITE_BINANCE_API_KEY;
   const apiSecret = import.meta.env.VITE_BINANCE_API_SECRET;
   
   if (!apiKey || !apiSecret) {
-    console.error('❌ Missing Binance API credentials for WebSocket connection!');
-    console.error('Please check your .env file and ensure you have:');
-    console.error('- VITE_BINANCE_API_KEY=your_api_key');
-    console.error('- VITE_BINANCE_API_SECRET=your_api_secret');
-    return false;
+    return {
+      isValid: false,
+      message: 'Missing Binance API credentials for WebSocket connection. Please check your .env file.'
+    };
   }
   
-  if (apiKey === 'your_binance_api_key_here' || apiSecret === 'your_binance_api_secret_here') {
-    console.error('❌ Please replace placeholder API credentials with your actual Binance API keys!');
-    console.error('Get your API keys from:');
-    console.error('- Testnet: https://testnet.binancefuture.com/');
-    console.error('- Production: https://www.binance.com/en/my/settings/api-management');
-    return false;
+  if (apiKey === 'your_binance_api_key_here' || 
+      apiSecret === 'your_binance_api_secret_here' ||
+      apiKey === 'demo_mode' ||
+      apiSecret === 'demo_mode') {
+    return {
+      isValid: false,
+      message: 'Please replace placeholder API credentials with your actual Binance API keys for WebSocket connection.'
+    };
   }
   
-  return true;
+  return { isValid: true };
+};
+
+// Create mock WebSocket data for demo mode
+const createMockWebSocketData = (): { tickerData: FuturesTickerData; klineData: KlineData } => {
+  const basePrice = 45000 + Math.random() * 2000;
+  const priceChange = (Math.random() - 0.5) * 1000;
+  
+  return {
+    tickerData: {
+      symbol: 'BTCUSDT',
+      lastPrice: basePrice,
+      priceChange: priceChange,
+      priceChangePercent: (priceChange / (basePrice - priceChange)) * 100,
+      volume: Math.random() * 10000,
+      high24h: basePrice + Math.random() * 500,
+      low24h: basePrice - Math.random() * 500,
+      openPrice: basePrice - priceChange,
+      count: Math.floor(Math.random() * 10000),
+      markPrice: basePrice + (Math.random() - 0.5) * 10,
+      fundingRate: (Math.random() - 0.5) * 0.001,
+      nextFundingTime: Date.now() + 3600000,
+    },
+    klineData: {
+      symbol: 'BTCUSDT',
+      openTime: Date.now() - 3600000,
+      closeTime: Date.now(),
+      open: basePrice - priceChange,
+      high: basePrice + Math.random() * 200,
+      low: basePrice - Math.random() * 200,
+      close: basePrice,
+      volume: Math.random() * 100,
+      trades: Math.floor(Math.random() * 1000),
+      interval: '1h',
+    }
+  };
 };
 
 export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = []) => {
@@ -61,13 +110,40 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
+  const mockDataIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    // Check if we're in demo mode
+    if (isDemoMode()) {
+      console.log('🎭 Demo mode: Using mock WebSocket data');
+      setIsConnected(true);
+      setConnectionError(null);
+      
+      // Generate initial mock data
+      const mockData = createMockWebSocketData();
+      setTickerData(mockData.tickerData);
+      setKlineData(mockData.klineData);
+      
+      // Update mock data periodically
+      mockDataIntervalRef.current = setInterval(() => {
+        const newMockData = createMockWebSocketData();
+        setTickerData(newMockData.tickerData);
+        setKlineData(newMockData.klineData);
+      }, 2000);
+      
+      return () => {
+        if (mockDataIntervalRef.current) {
+          clearInterval(mockDataIntervalRef.current);
+        }
+      };
+    }
+
     const connectWebSocket = () => {
       try {
         // Validate setup before attempting connection
-        if (!validateWebSocketSetup()) {
-          setConnectionError('Invalid or missing API credentials. Please check your .env file.');
+        const validation = validateWebSocketSetup();
+        if (!validation.isValid) {
+          setConnectionError(validation.message || 'Invalid WebSocket setup');
           return;
         }
 
@@ -227,6 +303,9 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
     return () => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (mockDataIntervalRef.current) {
+        clearInterval(mockDataIntervalRef.current);
       }
       if (wsRef.current) {
         wsRef.current.close(1000, 'Component unmounting');
