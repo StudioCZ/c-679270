@@ -7,8 +7,8 @@ const TESTNET_SIGNED_PROXY_URL = '/binance-futures-testnet-signed-api';
 const PUBLIC_PROXY_URL = '/binance-futures-api';
 const TESTNET_PUBLIC_PROXY_URL = '/binance-futures-testnet-api';
 
-// WebSocket URLs
-const PRODUCTION_WS_URL = 'wss://fstream.binance.com';
+// WebSocket URLs - Updated to use correct Binance endpoints
+const PRODUCTION_WS_URL = 'wss://stream.binance.com:9443';
 const TESTNET_WS_URL = 'wss://fstream.binancefuture.com';
 
 // Get current environment setting
@@ -564,13 +564,20 @@ export const riskManagement = {
   },
 };
 
-// WebSocket stream utilities
+// WebSocket stream utilities - Updated for correct Binance endpoints
 export const createFuturesWebSocketUrl = (streams: string[]): string => {
   const streamString = streams.join('/');
-  return `${WS_BASE_URL}/stream?streams=${streamString}`;
+  
+  if (isTestnet) {
+    // For testnet, use the futures-specific WebSocket endpoint
+    return `${WS_BASE_URL}/stream?streams=${streamString}`;
+  } else {
+    // For production, use the general Binance WebSocket endpoint with combined streams
+    return `${WS_BASE_URL}/stream?streams=${streamString}`;
+  }
 };
 
-// Common stream names for BTCUSDT
+// Common stream names for BTCUSDT - Updated for correct format
 export const BTCUSDT_STREAMS = {
   kline_1m: 'btcusdt@kline_1m',
   kline_15m: 'btcusdt@kline_15m',

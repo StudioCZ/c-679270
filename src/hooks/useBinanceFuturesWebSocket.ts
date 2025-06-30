@@ -199,6 +199,7 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
   const mockDataIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     // Check if we're in demo mode
@@ -270,6 +271,13 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
           setConnectionError(null);
           reconnectAttempts.current = 0;
           console.log(`✅ Binance Futures WebSocket connected successfully [${environment}]`);
+          
+          // Set up ping interval to keep connection alive (every 20 seconds as per Binance docs)
+          pingIntervalRef.current = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.ping();
+            }
+          }, 20000);
         };
 
         ws.onmessage = (event) => {
@@ -346,9 +354,19 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
           }
         };
 
+        // Handle pong frames (response to ping)
+        ws.onpong = () => {
+          console.log('🏓 Received pong from Binance WebSocket');
+        };
+
         ws.onclose = (event) => {
           setIsConnected(false);
           console.log(`🔌 Futures WebSocket disconnected [${environment}]:`, event.code, event.reason);
+          
+          // Clear ping interval
+          if (pingIntervalRef.current) {
+            clearInterval(pingIntervalRef.current);
+          }
           
           // Provide specific error messages for common close codes
           if (event.code === 1006) {
@@ -357,6 +375,10 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
             console.error('2. Firewall blocking WebSocket connections');
             console.error('3. API access restrictions');
             console.error('4. Invalid API credentials');
+          } else if (event.code === 1002) {
+            console.error('❌ WebSocket protocol error. Check if the WebSocket URL is correct.');
+          } else if (event.code === 1011) {
+            console.error('❌ Server error. Binance WebSocket server encountered an error.');
           }
           
           if (event.code !== 1000 && reconnectAttempts.current < 10) {
@@ -404,6 +426,9 @@ export const useBinanceFuturesWebSocket = (symbol: string, streams: string[] = [
       }
       if (mockDataIntervalRef.current) {
         clearInterval(mockDataIntervalRef.current);
+      }
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
       }
       if (wsRef.current) {
         wsRef.current.close(1000, 'Component unmounting');
