@@ -15,7 +15,7 @@ export const useBinanceOrderBook = (symbol: string, limit: number = 20) => {
   return useQuery({
     queryKey: ['binance-orderbook', symbol, limit],
     queryFn: async (): Promise<OrderBook> => {
-      const url = `https://api.binance.com/api/v3/depth?symbol=${symbol}&limit=${limit}`;
+      const url = `/binance-api/api/v3/depth?symbol=${symbol}&limit=${limit}`;
       
       console.log('🔄 Fetching real Binance order book:', { symbol, limit, url });
       

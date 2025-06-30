@@ -26,7 +26,7 @@ export const useBinanceMarketData = (symbol: string) => {
   return useQuery({
     queryKey: ['binance-market-data', symbol],
     queryFn: async (): Promise<MarketStats> => {
-      const url = `https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`;
+      const url = `/binance-api/api/v3/ticker/24hr?symbol=${symbol}`;
       
       console.log('🔄 Fetching real Binance market data:', { symbol, url });
       

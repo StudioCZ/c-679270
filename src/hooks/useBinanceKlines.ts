@@ -13,7 +13,7 @@ export const useBinanceKlines = (symbol: string, timeframe: string) => {
     queryKey: ['binance-klines', symbol, timeframe],
     queryFn: async () => {
       const interval = timeframeMap[timeframe] || '1h';
-      const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=500`;
+      const url = `/binance-api/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=500`;
       
       console.log('🔄 Fetching real Binance data:', { symbol, interval, url });
       
