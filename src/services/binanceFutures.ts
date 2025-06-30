@@ -1,29 +1,21 @@
-import { createHmac } from 'crypto';
-
-// Environment variables for API credentials
+// Environment variables for API credentials (used only for client-side headers, secrets handled by proxy)
 const API_KEY = import.meta.env.VITE_BINANCE_API_KEY || '';
-const API_SECRET = import.meta.env.VITE_BINANCE_API_SECRET || '';
 
-// Base URLs
-const PRODUCTION_BASE_URL = 'https://fapi.binance.com';
-const TESTNET_BASE_URL = 'https://testnet.binancefuture.com';
+// Proxy URLs (no direct API URLs needed since we use proxies)
+const SIGNED_PROXY_URL = '/binance-futures-signed-api';
+const TESTNET_SIGNED_PROXY_URL = '/binance-futures-testnet-signed-api';
+const PUBLIC_PROXY_URL = '/binance-futures-api';
+const TESTNET_PUBLIC_PROXY_URL = '/binance-futures-testnet-api';
+
+// WebSocket URLs
 const PRODUCTION_WS_URL = 'wss://fstream.binance.com';
 const TESTNET_WS_URL = 'wss://fstream.binancefuture.com';
 
 // Get current environment setting
 const isTestnet = import.meta.env.VITE_BINANCE_TESTNET === 'true';
-const BASE_URL = isTestnet ? TESTNET_BASE_URL : PRODUCTION_BASE_URL;
 export const WS_BASE_URL = isTestnet ? TESTNET_WS_URL : PRODUCTION_WS_URL;
 
-// HMAC SHA256 signature generator
-const generateSignature = (queryString: string): string => {
-  if (!API_SECRET) {
-    throw new Error('BINANCE_API_SECRET is required for signed requests');
-  }
-  return createHmac('sha256', API_SECRET).update(queryString).digest('hex');
-};
-
-// Create signed request parameters
+// Create parameters with timestamp (signature will be added by proxy)
 const createSignedParams = (params: Record<string, any> = {}): string => {
   const timestamp = Date.now();
   const queryString = new URLSearchParams({
@@ -31,8 +23,7 @@ const createSignedParams = (params: Record<string, any> = {}): string => {
     timestamp: timestamp.toString(),
   }).toString();
   
-  const signature = generateSignature(queryString);
-  return `${queryString}&signature=${signature}`;
+  return queryString;
 };
 
 // Generic API request function
@@ -46,17 +37,24 @@ const apiRequest = async (
     'Content-Type': 'application/json',
   };
 
-  if (API_KEY) {
-    headers['X-MBX-APIKEY'] = API_KEY;
+  // Determine base URL based on signed status and testnet setting
+  let baseUrl: string;
+  if (signed) {
+    baseUrl = isTestnet ? TESTNET_SIGNED_PROXY_URL : SIGNED_PROXY_URL;
+    // Don't set API key header for signed requests - proxy will handle it
+  } else {
+    baseUrl = isTestnet ? TESTNET_PUBLIC_PROXY_URL : PUBLIC_PROXY_URL;
+    // Set API key for public requests that might need it
+    if (API_KEY) {
+      headers['X-MBX-APIKEY'] = API_KEY;
+    }
   }
 
-  let url = `${BASE_URL}${endpoint}`;
+  let url = `${baseUrl}${endpoint}`;
   let body: string | undefined;
 
   if (signed) {
-    if (!API_KEY || !API_SECRET) {
-      throw new Error('API credentials required for signed requests');
-    }
+    // For signed requests, prepare parameters with timestamp
     const signedParams = createSignedParams(params);
     if (method === 'GET' || method === 'DELETE') {
       url += `?${signedParams}`;
@@ -65,6 +63,7 @@ const apiRequest = async (
       headers['Content-Type'] = 'application/x-www-form-urlencoded';
     }
   } else if (Object.keys(params).length > 0) {
+    // For public requests, just add query parameters
     const queryString = new URLSearchParams(params).toString();
     url += `?${queryString}`;
   }
