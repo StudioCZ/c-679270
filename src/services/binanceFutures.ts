@@ -53,44 +53,122 @@ const validateCredentials = (): { isValid: boolean; message?: string } => {
   return { isValid: true };
 };
 
-// Create mock data for demo mode
+// Mock data simulator for consistent demo data
+class MockDataSimulator {
+  private static instance: MockDataSimulator;
+  private basePrice: number = 43250.00;
+  private currentPrice: number = 43250.00;
+  private openPrice: number = 43100.00;
+  private high24h: number = 43800.00;
+  private low24h: number = 42900.00;
+  private volume: number = 15234.567;
+  private count: number = 125678;
+  private fundingRate: number = 0.0001;
+  private trend: number = 1;
+  private volatility: number = 0.0002;
+
+  private constructor() {
+    // Singleton pattern to ensure consistent data across all components
+  }
+
+  public static getInstance(): MockDataSimulator {
+    if (!MockDataSimulator.instance) {
+      MockDataSimulator.instance = new MockDataSimulator();
+    }
+    return MockDataSimulator.instance;
+  }
+
+  private resetTrend() {
+    if (Math.random() < 0.02) {
+      this.trend *= -1;
+      this.volatility = 0.0001 + Math.random() * 0.0003;
+    }
+  }
+
+  getNextPrice(): number {
+    this.resetTrend();
+    
+    const randomFactor = (Math.random() - 0.5) * 2;
+    const trendFactor = this.trend * 0.3;
+    const priceChange = this.currentPrice * this.volatility * (randomFactor + trendFactor);
+    
+    this.currentPrice += priceChange;
+    this.currentPrice = Math.max(this.low24h * 0.999, Math.min(this.high24h * 1.001, this.currentPrice));
+    
+    if (this.currentPrice > this.high24h) {
+      this.high24h = this.currentPrice;
+    }
+    if (this.currentPrice < this.low24h) {
+      this.low24h = this.currentPrice;
+    }
+    
+    return this.currentPrice;
+  }
+
+  getCurrentData() {
+    const price = this.currentPrice;
+    const priceChange = price - this.openPrice;
+    const priceChangePercent = (priceChange / this.openPrice) * 100;
+    
+    return {
+      price,
+      priceChange,
+      priceChangePercent,
+      volume: this.volume,
+      high24h: this.high24h,
+      low24h: this.low24h,
+      openPrice: this.openPrice,
+      count: this.count,
+      fundingRate: this.fundingRate,
+    };
+  }
+}
+
+// Create mock data for demo mode using the simulator
 const createMockData = (endpoint: string): any => {
+  const simulator = MockDataSimulator.getInstance();
+  const currentData = simulator.getCurrentData();
+
   if (endpoint.includes('/fapi/v1/ticker/24hr')) {
     return {
       symbol: 'BTCUSDT',
-      priceChange: '1234.56',
-      priceChangePercent: '2.34',
-      weightedAvgPrice: '45678.90',
-      prevClosePrice: '44444.34',
-      lastPrice: '45678.90',
+      priceChange: currentData.priceChange.toFixed(2),
+      priceChangePercent: currentData.priceChangePercent.toFixed(2),
+      weightedAvgPrice: currentData.price.toFixed(2),
+      prevClosePrice: currentData.openPrice.toFixed(2),
+      lastPrice: currentData.price.toFixed(2),
       lastQty: '0.001',
-      bidPrice: '45678.89',
-      askPrice: '45678.91',
-      openPrice: '44444.34',
-      highPrice: '46000.00',
-      lowPrice: '44000.00',
-      volume: '12345.678',
-      quoteVolume: '567890123.45',
+      bidPrice: (currentData.price - 0.01).toFixed(2),
+      askPrice: (currentData.price + 0.01).toFixed(2),
+      openPrice: currentData.openPrice.toFixed(2),
+      highPrice: currentData.high24h.toFixed(2),
+      lowPrice: currentData.low24h.toFixed(2),
+      volume: currentData.volume.toFixed(3),
+      quoteVolume: (currentData.volume * currentData.price).toFixed(2),
       openTime: Date.now() - 86400000,
       closeTime: Date.now(),
       firstId: 123456789,
       lastId: 123456790,
-      count: 1000
+      count: currentData.count
     };
   }
   
   if (endpoint.includes('/fapi/v1/klines')) {
     const now = Date.now();
     const mockKlines = [];
+    const basePrice = currentData.price;
+    
     for (let i = 0; i < 100; i++) {
-      const time = now - (i * 3600000); // 1 hour intervals
-      const basePrice = 45000 + Math.random() * 2000;
+      const time = now - (i * 3600000);
+      const priceVariation = (Math.random() - 0.5) * 200;
+      const candlePrice = basePrice + priceVariation;
+      
       mockKlines.unshift([
         time,
-        basePrice.toFixed(2),
-        (basePrice + Math.random() * 500).toFixed(2),
-        (basePrice - Math.random() * 500).toFixed(2),
-        (basePrice + (Math.random() - 0.5) * 1000).toFixed(2),
+        candlePrice.toFixed(2),
+        (candlePrice + Math.random() * 100).toFixed(2),
+        (candlePrice - Math.random() * 100).toFixed(2),
+        (candlePrice + (Math.random() - 0.5) * 50).toFixed(2),
         (Math.random() * 100).toFixed(3),
         time + 3599999,
         (Math.random() * 1000000).toFixed(2),
@@ -106,10 +184,10 @@ const createMockData = (endpoint: string): any => {
   if (endpoint.includes('/fapi/v1/premiumIndex')) {
     return {
       symbol: 'BTCUSDT',
-      markPrice: '45678.90',
-      indexPrice: '45678.85',
-      estimatedSettlePrice: '45678.88',
-      lastFundingRate: '0.00010000',
+      markPrice: currentData.price.toFixed(2),
+      indexPrice: (currentData.price - 0.05).toFixed(2),
+      estimatedSettlePrice: (currentData.price - 0.02).toFixed(2),
+      lastFundingRate: currentData.fundingRate.toFixed(8),
       nextFundingTime: Date.now() + 3600000,
       interestRate: '0.00010000',
       time: Date.now()
@@ -125,7 +203,7 @@ const createMockData = (endpoint: string): any => {
   }
   
   if (endpoint.includes('/fapi/v1/depth')) {
-    const basePrice = 45678.90;
+    const basePrice = currentData.price;
     const bids = [];
     const asks = [];
     
@@ -147,7 +225,6 @@ const createMockData = (endpoint: string): any => {
     };
   }
   
-  // Default mock response
   return {
     message: 'Demo mode - mock data',
     timestamp: Date.now()
@@ -174,7 +251,7 @@ const apiRequest = async (
 ): Promise<any> => {
   // Check if we're in demo mode
   if (isDemoMode()) {
-    console.log(`🎭 Demo mode: Returning mock data for ${endpoint}`);
+    console.log(`🎭 Demo mode: Returning consistent mock data for ${endpoint}`);
     return createMockData(endpoint);
   }
 
