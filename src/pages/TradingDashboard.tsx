@@ -13,11 +13,28 @@ import SettingsPanel from "@/components/trading/SettingsPanel";
 import MarketOverview from "@/components/trading/MarketOverview";
 import { TrendingUp, TrendingDown, Activity, Settings, BarChart3, Bell } from "lucide-react";
 import { useTheme } from "next-themes";
+import { toast } from "sonner";
 
 const TradingDashboard = () => {
   const [activeTimeframe, setActiveTimeframe] = useState("1h");
   const [alertsEnabled, setAlertsEnabled] = useState(true);
   const { theme, setTheme } = useTheme();
+
+  const handleTimeframeChange = (timeframe: string) => {
+    setActiveTimeframe(timeframe);
+    toast.info(`Switched to ${timeframe} timeframe`);
+  };
+
+  const handleAlertsToggle = (enabled: boolean) => {
+    setAlertsEnabled(enabled);
+    toast.success(enabled ? "Alerts enabled" : "Alerts disabled");
+  };
+
+  const handleThemeToggle = () => {
+    const newTheme = theme === "dark" ? "light" : "dark";
+    setTheme(newTheme);
+    toast.success(`Switched to ${newTheme} mode`);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -30,7 +47,7 @@ const TradingDashboard = () => {
                 <Activity className="h-6 w-6 text-primary" />
                 <h1 className="text-xl font-bold">BTC Signal Pro</h1>
               </div>
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="text-xs animate-pulse">
                 Live
               </Badge>
             </div>
@@ -40,7 +57,7 @@ const TradingDashboard = () => {
                 <Bell className="h-4 w-4" />
                 <Switch
                   checked={alertsEnabled}
-                  onCheckedChange={setAlertsEnabled}
+                  onCheckedChange={handleAlertsToggle}
                   id="alerts"
                 />
                 <Label htmlFor="alerts" className="text-sm">Alerts</Label>
@@ -49,7 +66,7 @@ const TradingDashboard = () => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                onClick={handleThemeToggle}
               >
                 {theme === "dark" ? "🌙" : "☀️"}
               </Button>
@@ -81,7 +98,8 @@ const TradingDashboard = () => {
                         key={tf}
                         variant={activeTimeframe === tf ? "default" : "outline"}
                         size="sm"
-                        onClick={() => setActiveTimeframe(tf)}
+                        onClick={() => handleTimeframeChange(tf)}
+                        className="transition-all duration-200"
                       >
                         {tf}
                       </Button>
@@ -121,7 +139,7 @@ const TradingDashboard = () => {
               <TabsContent value="signals" className="mt-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {/* Signal History Cards */}
-                  <Card>
+                  <Card className="hover:shadow-lg transition-shadow duration-200">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center justify-between">
                         <span>Recent Signal</span>
@@ -154,7 +172,7 @@ const TradingDashboard = () => {
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="hover:shadow-lg transition-shadow duration-200">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center justify-between">
                         <span>Previous Signal</span>
@@ -187,7 +205,7 @@ const TradingDashboard = () => {
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="hover:shadow-lg transition-shadow duration-200">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm">Signal Statistics</CardTitle>
                     </CardHeader>

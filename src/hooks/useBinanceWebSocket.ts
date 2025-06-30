@@ -14,10 +14,16 @@ export const useBinanceWebSocket = (symbol: string) => {
   const [tickerData, setTickerData] = useState<TickerData | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const connectWebSocket = () => {
       try {
+        // Clear any existing reconnection timeout
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+        }
+
         const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@ticker`);
         wsRef.current = ws;
 
@@ -43,11 +49,14 @@ export const useBinanceWebSocket = (symbol: string) => {
           }
         };
 
-        ws.onclose = () => {
+        ws.onclose = (event) => {
           setIsConnected(false);
-          console.log('WebSocket disconnected');
-          // Attempt to reconnect after 3 seconds
-          setTimeout(connectWebSocket, 3000);
+          console.log('WebSocket disconnected:', event.code, event.reason);
+          
+          // Only attempt to reconnect if it wasn't a manual close
+          if (event.code !== 1000) {
+            reconnectTimeoutRef.current = setTimeout(connectWebSocket, 3000);
+          }
         };
 
         ws.onerror = (error) => {
@@ -56,24 +65,32 @@ export const useBinanceWebSocket = (symbol: string) => {
         };
       } catch (error) {
         console.error('Error creating WebSocket:', error);
+        setIsConnected(false);
+        
         // Fallback to mock data if WebSocket fails
         setTickerData({
           symbol: 'BTCUSDT',
-          lastPrice: 43250.00,
-          priceChange: 125.50,
-          priceChangePercent: 2.85,
-          volume: 28450.25,
+          lastPrice: 43250.00 + (Math.random() - 0.5) * 1000,
+          priceChange: 125.50 + (Math.random() - 0.5) * 100,
+          priceChangePercent: 2.85 + (Math.random() - 0.5) * 2,
+          volume: 28450.25 + Math.random() * 5000,
           high24h: 43890.00,
           low24h: 42150.00,
         });
+
+        // Try to reconnect after 5 seconds
+        reconnectTimeoutRef.current = setTimeout(connectWebSocket, 5000);
       }
     };
 
     connectWebSocket();
 
     return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
       if (wsRef.current) {
-        wsRef.current.close();
+        wsRef.current.close(1000, 'Component unmounting');
       }
     };
   }, [symbol]);

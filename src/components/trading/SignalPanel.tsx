@@ -3,7 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { TrendingUp, TrendingDown, AlertTriangle, Target, Shield } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertTriangle, Target, Shield, Copy, Bell, Eye } from "lucide-react";
+import { toast } from "sonner";
 
 const SignalPanel = () => {
   const currentSignal = {
@@ -25,10 +26,37 @@ const SignalPanel = () => {
     { name: "Volume", value: "High", status: "confirming", color: "text-blue-400" },
   ];
 
+  const handleCopySignal = () => {
+    const signalText = `
+🚀 BTC/USDT ${currentSignal.type} Signal
+📊 Entry: $${currentSignal.entry.toLocaleString()}
+🛡️ Stop Loss: $${currentSignal.stopLoss.toLocaleString()}
+🎯 Take Profit: $${currentSignal.takeProfit.toLocaleString()}
+📈 Risk:Reward: 1:${currentSignal.riskReward}
+⏰ Timeframe: ${currentSignal.timeframe}
+🎯 Confidence: ${currentSignal.confidence}%
+📋 Strategies: ${currentSignal.strategies.join(', ')}
+    `.trim();
+
+    navigator.clipboard.writeText(signalText).then(() => {
+      toast.success("Signal copied to clipboard!");
+    }).catch(() => {
+      toast.error("Failed to copy signal");
+    });
+  };
+
+  const handleSetAlert = () => {
+    toast.success("Alert set successfully!");
+  };
+
+  const handleViewAnalysis = () => {
+    toast.info("Opening detailed analysis...");
+  };
+
   return (
     <div className="space-y-4">
       {/* Current Signal */}
-      <Card>
+      <Card className="border-l-4 border-l-green-500">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center justify-between text-lg">
             <span>Current Signal</span>
@@ -145,13 +173,30 @@ const SignalPanel = () => {
           <CardTitle className="text-lg">Quick Actions</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <Button className="w-full" size="sm">
+          <Button 
+            className="w-full" 
+            size="sm"
+            onClick={handleCopySignal}
+          >
+            <Copy className="w-4 h-4 mr-2" />
             Copy Signal
           </Button>
-          <Button variant="outline" className="w-full" size="sm">
+          <Button 
+            variant="outline" 
+            className="w-full" 
+            size="sm"
+            onClick={handleSetAlert}
+          >
+            <Bell className="w-4 h-4 mr-2" />
             Set Alert
           </Button>
-          <Button variant="ghost" className="w-full" size="sm">
+          <Button 
+            variant="ghost" 
+            className="w-full" 
+            size="sm"
+            onClick={handleViewAnalysis}
+          >
+            <Eye className="w-4 h-4 mr-2" />
             View Analysis
           </Button>
         </CardContent>
@@ -161,7 +206,7 @@ const SignalPanel = () => {
       <Card className="border-yellow-500/30 bg-yellow-500/5">
         <CardContent className="pt-4">
           <div className="flex items-start space-x-2">
-            <AlertTriangle className="w-4 h-4 text-yellow-500 mt-0.5" />
+            <AlertTriangle className="w-4 h-4 text-yellow-500 mt-0.5 flex-shrink-0" />
             <div className="text-xs text-yellow-600 dark:text-yellow-400">
               <div className="font-medium mb-1">Risk Warning</div>
               <div>

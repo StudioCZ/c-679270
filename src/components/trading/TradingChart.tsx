@@ -53,6 +53,8 @@ const TradingChart = ({ timeframe }: TradingChartProps) => {
         color: 'rgba(171, 71, 188, 0.3)',
         text: 'BTC/USDT',
       },
+      width: chartContainerRef.current.clientWidth,
+      height: chartContainerRef.current.clientHeight,
     });
 
     // Create candlestick series
@@ -85,8 +87,8 @@ const TradingChart = ({ timeframe }: TradingChartProps) => {
 
     // Handle resize
     const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({
+      if (chartContainerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({
           width: chartContainerRef.current.clientWidth,
           height: chartContainerRef.current.clientHeight,
         });
@@ -97,7 +99,9 @@ const TradingChart = ({ timeframe }: TradingChartProps) => {
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      chart.remove();
+      if (chartRef.current) {
+        chartRef.current.remove();
+      }
     };
   }, []);
 
@@ -105,65 +109,76 @@ const TradingChart = ({ timeframe }: TradingChartProps) => {
   useEffect(() => {
     if (!isChartReady || !historicalData || !candlestickSeriesRef.current || !volumeSeriesRef.current) return;
 
-    const candleData = historicalData.map((kline: any) => ({
-      time: kline[0] / 1000,
-      open: parseFloat(kline[1]),
-      high: parseFloat(kline[2]),
-      low: parseFloat(kline[3]),
-      close: parseFloat(kline[4]),
-    }));
+    try {
+      const candleData = historicalData.map((kline: any) => ({
+        time: Math.floor(kline[0] / 1000),
+        open: parseFloat(kline[1]),
+        high: parseFloat(kline[2]),
+        low: parseFloat(kline[3]),
+        close: parseFloat(kline[4]),
+      }));
 
-    const volumeData = historicalData.map((kline: any) => ({
-      time: kline[0] / 1000,
-      value: parseFloat(kline[5]),
-      color: parseFloat(kline[4]) >= parseFloat(kline[1]) ? '#10b981' : '#ef4444',
-    }));
+      const volumeData = historicalData.map((kline: any) => ({
+        time: Math.floor(kline[0] / 1000),
+        value: parseFloat(kline[5]),
+        color: parseFloat(kline[4]) >= parseFloat(kline[1]) ? '#10b981' : '#ef4444',
+      }));
 
-    candlestickSeriesRef.current.setData(candleData);
-    volumeSeriesRef.current.setData(volumeData);
+      candlestickSeriesRef.current.setData(candleData);
+      volumeSeriesRef.current.setData(volumeData);
 
-    // Add some example signals
-    addExampleSignals();
+      // Add some example signals
+      addExampleSignals();
+    } catch (error) {
+      console.error('Error updating chart data:', error);
+    }
   }, [historicalData, isChartReady]);
 
   const addExampleSignals = () => {
     if (!candlestickSeriesRef.current) return;
 
-    // Add buy signal marker
-    candlestickSeriesRef.current.setMarkers([
-      {
-        time: Math.floor(Date.now() / 1000) - 3600,
-        position: 'belowBar',
-        color: '#10b981',
-        shape: 'arrowUp',
-        text: 'BUY Signal\nSMC + Elliott Wave',
-        size: 1,
-      },
-      {
-        time: Math.floor(Date.now() / 1000) - 7200,
-        position: 'aboveBar',
-        color: '#ef4444',
-        shape: 'arrowDown',
-        text: 'SELL Signal\nBreak of Structure',
-        size: 1,
-      },
-    ]);
+    try {
+      // Add buy signal marker
+      candlestickSeriesRef.current.setMarkers([
+        {
+          time: Math.floor(Date.now() / 1000) - 3600,
+          position: 'belowBar',
+          color: '#10b981',
+          shape: 'arrowUp',
+          text: 'BUY Signal\nSMC + Elliott Wave',
+          size: 1,
+        },
+        {
+          time: Math.floor(Date.now() / 1000) - 7200,
+          position: 'aboveBar',
+          color: '#ef4444',
+          shape: 'arrowDown',
+          text: 'SELL Signal\nBreak of Structure',
+          size: 1,
+        },
+      ]);
+    } catch (error) {
+      console.error('Error adding signal markers:', error);
+    }
   };
 
   if (isLoading) {
     return (
-      <div className="w-full h-full flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="w-full h-full flex items-center justify-center bg-card rounded-lg">
+        <div className="flex flex-col items-center space-y-2">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <p className="text-sm text-muted-foreground">Loading chart data...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-full relative">
+    <div className="w-full h-full relative bg-card rounded-lg overflow-hidden">
       <div ref={chartContainerRef} className="w-full h-full" />
       
       {/* Price Info Overlay */}
-      <div className="absolute top-4 left-4 bg-background/80 backdrop-blur-sm rounded-lg p-3 border">
+      <div className="absolute top-4 left-4 bg-background/90 backdrop-blur-sm rounded-lg p-3 border shadow-lg">
         <div className="flex items-center space-x-4">
           <div>
             <div className="text-2xl font-bold font-mono">
@@ -182,10 +197,17 @@ const TradingChart = ({ timeframe }: TradingChartProps) => {
 
       {/* Signal Indicators */}
       <div className="absolute top-4 right-4 space-y-2">
-        <div className="bg-green-500/20 border border-green-500/30 rounded-lg p-2 text-green-400 text-xs">
+        <div className="bg-green-500/20 border border-green-500/30 rounded-lg p-2 text-green-400 text-xs backdrop-blur-sm">
           <div className="font-semibold">Active BUY Signal</div>
           <div>Confidence: 85%</div>
         </div>
+      </div>
+
+      {/* Timeframe indicator */}
+      <div className="absolute bottom-4 left-4 bg-background/90 backdrop-blur-sm rounded-lg px-3 py-1 border">
+        <span className="text-xs font-medium text-muted-foreground">
+          Timeframe: {timeframe.toUpperCase()}
+        </span>
       </div>
     </div>
   );
